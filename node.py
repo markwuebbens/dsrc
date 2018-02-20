@@ -1,11 +1,12 @@
-#from sim import SLOT_TIME, CW_NOMINAL, IFS_TIME, BEACON_PERIOD, PACKET_SIZE, SIM_LIMIT
 import random
+import string
 from config import *
 
 class State:
     idle, sense, count, tx = ("idle", "sense", "count", "tx")
 
 class CW_PRNG:
+    #FIXME - Make it a class or static method...
     def gen_CW(self):
         #FIXME - Double check that's correct
         val = random.uniform(0, CW_NOMINAL * 1.0 * SLOT_TIME)
@@ -24,6 +25,9 @@ class Message_Piece:
         self.is_end = False
         self.seq_num = 0
 
+def random_stuff(chars = ascii.uppercase + string.digits,\
+                 size = 3):
+    return ''.join(random.choice(chars) for _ in range(size))
 
 class DSRC_Node:
 
@@ -67,12 +71,8 @@ class DSRC_Node:
         ##############################
         # "Extra" vars for statistics
         ##############################
-        self.packet_cnt = 0
-        self.finished_tx_cnt = 0
         self.expired_cnt = 0
-        self.longest_delay = 0
         self.packet_creation_time = 0 #Set when new beacon is generated
-        self.aggr_delay_time = 0
 
         # Log 'ack's from rx'ers here
         self.start_rx_set = set()
@@ -134,7 +134,6 @@ class DSRC_Node:
         if (self.beacon_counter <= 0):
             #Beacon period has elapsed. Generate new beacon
             self.beacon_counter = BEACON_PERIOD
-            self.packet_cnt += 1
             self.packet_creation_time = self.sys_clock.time
 
             if not (self.ns is State.idle):
@@ -296,14 +295,8 @@ class DSRC_Node:
 
         ret = ""
 
-        time_now = self.sys_clock.time
-        this_tx_delay = time_now - self.packet_creation_time
-
-        if (this_tx_delay > self.longest_delay):
-            self.longest_delay = this_tx_delay
-
-        self.finished_tx_cnt += 1
-        self.aggr_delay_time += this_tx_delay
+        start_time = self.packet_creation_time
+        sent_time = self.sys_clock.time
 
         if (self.sys_clock.time > 1) and\
             (self.x > TX_RANGE) and\
