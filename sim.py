@@ -4,10 +4,12 @@ import os
 import random
 from network import DSRC_Network
 from node import DSRC_Node, State
+from time import strftime
 
 from config import *
 
 node_id = 0
+log_dir = strftime("%m-%d-%Y_%H-%M") + "_log/"
 
 class Clock():
     def __init__(self):
@@ -22,6 +24,7 @@ class Clock():
 def generate_node(clock, network, init_x = 0):
 
     global node_id
+    global sim_dir
     coin_toss = random.random()
 
     density_weight = clock.dt * AVG_SPEED * VEH_DENSITY #s * m/s * veh/m
@@ -29,7 +32,7 @@ def generate_node(clock, network, init_x = 0):
     if (coin_toss < density_weight):
 
         velocity = random.uniform(AVG_SPEED-SPEED_DELTA, AVG_SPEED+SPEED_DELTA)
-        node = DSRC_Node(node_id, init_x, velocity, clock)
+        node = DSRC_Node(node_id, init_x, velocity, clock, log_dir)
         node_id += 1
 
         network.add_node(node)
