@@ -9,8 +9,8 @@ AVG_SPEED = 20 #m/s
 SPEED_DELTA = 4  #m/s
 VEH_DENSITY = .165 # veh/m
 
-ROAD_LIMIT = 1000 #m
-END_TIME = 60.0 * 5 #s
+ROAD_LIMIT = 500 #m
+END_TIME = 1.0 * 4 #s
 
 #Network defs
 SLOT_TIME_US = 13.0 #us

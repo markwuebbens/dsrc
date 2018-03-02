@@ -10,6 +10,7 @@ from config import *
 
 node_id = 0
 log_dir = strftime("%m-%d-%Y_%H-%M") + "_log/"
+os.mkdir(log_dir)
 
 class Clock():
     def __init__(self):
@@ -20,6 +21,10 @@ class Clock():
     def tick(self):
         self.time += self.dt
         self.ticks += 1
+        #print "TICK! {}".format(self.time)
+
+    def timenow(self):
+        return self.time
 
 def generate_node(clock, network, init_x = 0):
 
@@ -38,12 +43,12 @@ def generate_node(clock, network, init_x = 0):
         network.add_node(node)
 
 def generate_initial_traffic(clock, network):
-    marker = 0;
+    marker = ROAD_LIMIT;
 
-    while (marker < ROAD_LIMIT - TX_RANGE):
+    while (marker > 0):
         node = generate_node(clock, network, marker)
 
-        marker += clock.dt * AVG_SPEED
+        marker -= clock.dt * AVG_SPEED
 
 def main():
 
@@ -55,6 +60,7 @@ def main():
     num_finished = 0
 
     while(1):
+        #print "time:{:.6f}, timenow:{:.6f}".format(clock.time, clock.timenow())
 
         #generate and add new nodes
         generate_node(clock, this_network)
@@ -79,7 +85,7 @@ def main():
         this_network.transition_sim()
 
         #Finish at some point...
-        if (clock.time > END_TIME):
+        if (clock.timenow() > END_TIME):
             exit(1)
 
         clock.tick()

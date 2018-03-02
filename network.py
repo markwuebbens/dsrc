@@ -91,10 +91,10 @@ class DSRC_Network:
             hi_i = this_i
 
             #Update lo_tx_i (closest txer strictly behind this node)
-            while (lo_tx_i < len_txers) and
+            while (lo_tx_i < len_txers) and\
                   (_below_range(this_node, tx_sorted[lo_tx_i])):
 
-                if (lo_tx_i + 1 < len_txers) and
+                if (lo_tx_i + 1 < len_txers) and\
                    (_below_range(this_node, tx_sorted[lo_tx_i + 1])):
 
                     lo_tx_i += 1
@@ -103,17 +103,19 @@ class DSRC_Network:
 
             #Find lo_i and hi_i
             # (furthest nodes within range behind and ahead of this one)
-            while (lo_i - 1 >= 0) and
+            while (lo_i - 1 >= 0) and\
                   (_in_range(this_node, all_sorted[lo_i - 1])):
+
                 lo_i -= 1
 
-            while (hi_i + 1 < len_all) and
+            while (hi_i + 1 < len_all) and\
                   (_in_range(this_node, all_sorted[hi_i + 1])):
+
                 hi_i += 1
 
             #Determine if tx'er nodes are in range
             #Delivers message piece if single txer in range
-            if (lo_tx_i + 1 < len_txers) and
+            if (lo_tx_i + 1 < len_txers) and\
                (_in_range(this_node, tx_sorted[lo_tx_i + 1])):
 
                 idle_channel = False
@@ -122,8 +124,8 @@ class DSRC_Network:
 
                     this_node.receive_message_from(tx_sorted[lo_tx_i + 1])
 
-            elif (lo_tx_i < len_txers) and
-                 (_in_range(tx_sorted[lo_tx_i])):
+            elif (lo_tx_i < len_txers) and\
+                 (_in_range(this_node, tx_sorted[lo_tx_i])):
 
                 idle_channel = False
 
@@ -142,6 +144,4 @@ class DSRC_Network:
 
         for node in self.all_nodes:
 
-            if (node.cs != node.ns):
-
-                node.transition_state()
+            node.transition_state()
