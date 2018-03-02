@@ -36,7 +36,7 @@ class Message_Piece:
 
 class DSRC_Node:
 
-    def __init__(self, uuid, init_x, init_v, clock):
+    def __init__(self, uuid, init_x, init_v, clock, log_dir):
 
         self.cs = State.idle
         self.ns = State.idle
@@ -45,7 +45,7 @@ class DSRC_Node:
         self.name = Name_Generator.gen(uuid)
         self.sys_clock = clock
 
-        self.logger = DSRC_Logger()
+        self.logger = DSRC_Logger(log_dir, uuid, clock.time)
 
         # Road related vars
         self.x = init_x
@@ -81,10 +81,10 @@ class DSRC_Node:
         ##############################
         # "Extra" vars for statistics
         ##############################
+        self._tx_start_density = 0
 
         # Log 'ack's from rx'ers here
-        self.start_rx_set = set()
-        self.end_rx_set = set()
+        self._ack_rx_set = set()
 
     ###########################################################################
     # Public Class Methods
@@ -143,6 +143,8 @@ class DSRC_Node:
             if (self.channel_is_idle):
                 if (self.cw_cnt <= 0):
                     new_state = State.tx
+                    #FIXME
+                    self._tx_start_density = self.local_density
             else:
                 new_state = State.sense
 
@@ -182,7 +184,7 @@ class DSRC_Node:
             self.tx_origin = tx_uuid
             self.tx_msg_id = msg_uuid
             self.tx_seq = this_seq
-            tx_node._ack_start(self)
+            #tx_node._ack_start(self)
 
         elif (tx_uuid != self.tx_origin) or
              (msg_uuid != self.tx_msg_id) or
@@ -230,8 +232,8 @@ class DSRC_Node:
 
         if self.message is None:
             #First time here: generate new message object
-            self.message = Message_Piece(self.uuid, self.packet_id, self.x)
             self.packet_id += 1
+            self.message = Message_Piece(self.uuid, self.packet_id, self.x)
 
         else:
             #Update the message object
@@ -314,42 +316,30 @@ class DSRC_Node:
     # Logging Magic
     ###########################################################################
 
+    """
     def _ack_start(self, rx_node):
-        self.start_rx_set.add(rx_node)
+        self._start_rx_set.add(rx_node)
+    """
 
     def _ack_end(self, rx_node):
-        self.end_rx_set.add(rx_node)
+        self._ack_rx_set.add(rx_node)
 
     """
-    Nodes keep statistics internally about delays between completed beacons
-        -Longest individual Packet Interarrival time kept for worst case stats
-        -Average interarrival time calculated at the end
-
-    Returns: String summarizing the rx ack's for this message
+    Log stats about the finished message to disk
     """
     def _log_finished_message(self):
-
-        ret = ""
-
 
         if (self.sys_clock.time > 1) and\
             (self.x > TX_RANGE) and\
             (self.x < ROAD_LIMIT - TX_RANGE):
 
-            rcvd = len(self.end_rx_set)
-            tot = rcvd + len(self.start_rx_set)
+            rcvd_set_str = "".join(\
+                "{:n} ".format(node.uuid) for node in self._ack_rx_set)
 
-            end_nodes = "".join(\
-                "{},".format(node.uuid) for node in self.end_rx_set)
-            dropped_nodes = "".join(\
-                "{},".format(node.uuid) for node in (self.start_rx_set - self.end_rx_set))
 
-            start_time = self.packet_creation_time
-            sent_time = self.sys_clock.time
+            self.logger.log_packet(self.packet_id, self.x,\
+                                   self.packet_create_time,\
+                                   self.sys_clock.time,\
+                                   self._tx_start_density, self.local_density,\
+                                   rcvd_set_str)
 
-            Packet_Ln.to_str(self.uuid, self.x, start_time, sent_time,
-            ret = "NODE#{:n}: PKT#{:n} x={:.2f} rate={}/{} | {} | {}\n".format(\
-                self.uuid, self.packet_id, self.x,\
-                rcvd, tot, end_nodes, dropped_nodes)
-
-        return ret
