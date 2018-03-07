@@ -9,7 +9,7 @@ from time import strftime
 from config import *
 
 node_id = 0
-log_dir = strftime("%m-%d-%Y_%H-%M") + "_log/"
+log_dir = strftime("%d%m%Y_%H%M%S") + "_log/"
 os.mkdir(log_dir)
 
 class Clock():
@@ -54,7 +54,7 @@ def main():
 
     clock = Clock()
 
-    this_network = DSRC_Network(clock)
+    this_network = DSRC_Network(clock, log_dir)
     generate_initial_traffic(clock, this_network)
 
     num_finished = 0

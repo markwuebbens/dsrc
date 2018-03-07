@@ -1,7 +1,7 @@
 import random
 import string
 from config import *
-from logger import DSRC_Logger
+from logger import DSRC_Node_Logger
 
 class State:
     idle, sense, count, tx = ("idle", "sense", "count", "tx")
@@ -53,7 +53,7 @@ class DSRC_Node:
         self.name = Name_Generator.gen(uuid)
         self.sys_clock = clock
 
-        self.logger = DSRC_Logger(log_dir, uuid, clock.timenow())
+        self.logger = DSRC_Node_Logger(log_dir, uuid, clock.timenow())
 
         # Road related vars
         self.x = init_x
@@ -209,6 +209,16 @@ class DSRC_Node:
                 #Completed Message!
                 tx_node._ack_end(self)
 
+    def in_hi_range_of(self, other_x):
+        return (other_x < self.x) and (other_x + TX_RANGE >= self.x)
+
+
+    def in_lo_range_of(self, other_x):
+        return (other_x >= self.x) and (self.x + TX_RANGE >= other_x)
+
+    def in_range_of(self, other_x):
+        return self.in_hi_range_of(other_x) or\
+               self.in_lo_range_of(other_x)
 
     ###########################################################################
     # Private Class Methods
