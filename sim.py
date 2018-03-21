@@ -3,6 +3,7 @@
 import os
 import random
 from network import DSRC_Network
+from logger import DSRC_Sim_Logger
 from node import DSRC_Node, State
 from time import strftime
 
@@ -54,8 +55,11 @@ def main():
 
     clock = Clock()
 
-    this_network = DSRC_Network(clock, log_dir)
+    this_network = DSRC_Network(clock)
     generate_initial_traffic(clock, this_network)
+
+    this_logger = DSRC_Sim_Logger(log_dir)
+    this_logger.write_intro(clock, strftime("%d%m%Y_%H%M%S"))
 
     num_finished = 0
 
@@ -86,6 +90,8 @@ def main():
 
         #Finish at some point...
         if (clock.timenow() > END_TIME):
+            this_logger.write_summary(clock, this_network, num_finished,
+                                      strftime("%d%m%Y_%H%M%S"))
             exit(1)
 
         clock.tick()

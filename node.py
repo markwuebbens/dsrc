@@ -67,6 +67,8 @@ class DSRC_Node:
         # Beaconing logic vars
         self.beacon_counter = Beacon_PRNG.gen_beacon()
         self.packet_creation_time = 0 #Set when new beacon is generated
+        # Log 'ack's from rx'ers for current packet here
+        self._ack_rx_set = set()
 
         # "Sense" state vars
         self.ifs_cnt = IFS_TIME
@@ -91,8 +93,6 @@ class DSRC_Node:
         ##############################
         self._tx_start_density = 0
 
-        # Log 'ack's from rx'ers here
-        self._ack_rx_set = set()
 
     ###########################################################################
     # Public Class Methods
@@ -306,6 +306,7 @@ class DSRC_Node:
             self.ifs_cnt = IFS_TIME
             self._gen_new_CW()
             self.bit_cnt = PACKET_SIZE
+            self._ack_rx_set.clear()
             self._clear_message()
 
         elif self.cs is State.sense:
@@ -319,8 +320,10 @@ class DSRC_Node:
 
         elif self.cs is State.tx:
             #Just finished TX'ing a packet
-            self.bit_cnt = PACKET_SIZE
             self._log_finished_message()
+            #(Cleanup after magical logging)
+            self.bit_cnt = PACKET_SIZE
+            self._ack_rx_set.clear()
             self._clear_message()
 
         else:
@@ -351,6 +354,7 @@ class DSRC_Node:
             (self.x > TX_RANGE) and\
             (self.x < ROAD_LIMIT - TX_RANGE):
 
+            rcvd_set_sz = len(self._ack_rx_set)
             rcvd_set_str = "".join(\
                 "{:n} ".format(node.uuid) for node in self._ack_rx_set)
 
@@ -358,5 +362,5 @@ class DSRC_Node:
                                    self.packet_creation_time,\
                                    self.sys_clock.timenow(),\
                                    self._tx_start_density, self.local_density,\
-                                   rcvd_set_str)
+                                   rcvd_set_sz, rcvd_set_str)
 

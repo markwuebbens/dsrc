@@ -10,7 +10,7 @@ SPEED_DELTA = 4  #m/s
 VEH_DENSITY = .165 # veh/m
 
 ROAD_LIMIT = 500 #m
-END_TIME = 1.0 * 5 #s
+END_TIME = 5.0 * 60 #s
 
 #Network defs
 SLOT_TIME_US = 13.0 #us

@@ -3,17 +3,14 @@ import math
 import random
 
 from node import State, DSRC_Node
-from logger import DSRC_Network_Logger
 from config import *
 #from sim import SLOT_TIME, IFS_TIME, TX_RATE, TX_RANGE, SIM_LIMIT
 
 class DSRC_Network:
 
-    def __init__(self, clock, log_dir):
+    def __init__(self, clock):
 
         self.sys_clock = clock
-
-        self.logger = DSRC_Network_Logger(clock, log_dir);
 
         #Total num nodes simulated in the network
         self.total_cnt = 0
@@ -64,7 +61,7 @@ class DSRC_Network:
         return finished_nodes
 
     """
-    Nodes receive valid transmissions and are informed of local channel conditions
+    Network informs each node of any valid transmissions and of local channel conditions
     """
     def arbitrate_channel_conditions(self):
 
