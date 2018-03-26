@@ -1,6 +1,8 @@
 import sys
 import os
 
+from config import ROAD_LIMIT, TX_RANGE
+
 Sum_Cnt_By_Rho_dict = {}
 
 def scrape_node(filename):
@@ -42,21 +44,14 @@ def scrape_node(filename):
 
             else:
 
-                if float(location[:-1]) > 430.0:
+                x_coord = float(location[:-1])
+                if (x_coord > ROAD_LIMIT - (TX_RANGE * 1.5)) or\
+                   (x_coord < TX_RANGE * 1.5):
                     continue
 
                 if this_density in Sum_Cnt_By_Rho_dict:
 
                     (sum_now, cnt_now) = Sum_Cnt_By_Rho_dict[this_density]
-
-                    if len(end_nodes)*1.0/this_density > 1.0:
-                        if this_density < 8:
-                            print this_density
-                            print '{} {}'.format(len(start_nodes), start_nodes)
-                            print '{} {}'.format(len(end_nodes), end_nodes)
-                            print location
-                            print packet_id
-                            print
 
                     Sum_Cnt_By_Rho_dict[this_density] = (sum_now + len(end_nodes), cnt_now + 1)
 
@@ -79,11 +74,8 @@ def print_final_stats():
 
         avg_rate = (this_sum*1.0)/(rho*this_cnt)
 
+    
         print '{}\t{}\t{}'.format(rho, this_cnt, avg_rate)
-
-        if (avg_rate > 1.0):
-            print
-
 
 
 
