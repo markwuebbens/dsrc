@@ -1,10 +1,5 @@
 import sys
-
-sum_dict = {}
-count_dict = {}
-
-rate_total = 0.0
-msg_total = 0
+import os
 
 Sum_Cnt_By_Rho_dict = {}
 
@@ -13,9 +8,9 @@ def scrape_node(filename):
 
     global Sum_Cnt_By_Rho_dict
 
-    node_num = filename.split('/')[1].split('_')[0]
+    node_num = filename.split('_')[0]
 
-    print 'ello from {}'.format(node_num)
+    #print 'ello from {}'.format(node_num)
 
     with open(filename, 'r') as file:
 
@@ -56,8 +51,26 @@ def scrape_node(filename):
                 else:
                     Sum_Cnt_By_Rho_dict[start_density] = (len(end_nodes)*1.0/start_density, 1)
 
+def scrape_directory(directory):
+
+    for filename in os.listdir(directory):
+        if filename.endswith('.log'):
+            scrape_node(directory + filename)
+
+def print_final_stats():
+
+    print '{}\t{}\t{}'.format('rho', 'sz', 'rate')
+    for rho in Sum_Cnt_By_Rho_dict:
+
+        (this_sum, this_cnt) = Sum_Cnt_By_Rho_dict[rho]
+
+        print '{}\t{}\t{}'.format(rho, this_cnt, this_sum*1.0/this_cnt)
 
 
+
+
+scrape_directory(sys.argv[1])
+print_final_stats()
 
 
 
@@ -67,11 +80,6 @@ scrape_node(sys.argv[3])
 scrape_node(sys.argv[4])
 scrape_node(sys.argv[5])
 
-for rho in Sum_Cnt_By_Rho_dict:
-
-    (this_sum, this_cnt) = Sum_Cnt_By_Rho_dict[rho]
-
-    print 'Density {} (sz {}) has avg_rate = {}'.format(rho, this_cnt, this_sum/this_cnt)
 
 #with open(sys.argv[1], 'r') as raw:
 #
