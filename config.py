@@ -27,6 +27,6 @@ TX_RATE_US = TX_RATE / US_WEIGHT #bits per us
 TX_RANGE = 50 #m
 
 CW_BASE = 2
-CW_POWER = 8 #4, 6, 8, 10
+CW_POWER = 10 #4, 6, 8, 10
 CW_NOMINAL = CW_BASE ** CW_POWER #units of 'slots'
 

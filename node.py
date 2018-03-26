@@ -68,7 +68,8 @@ class DSRC_Node:
         self.beacon_counter = Beacon_PRNG.gen_beacon()
         self.packet_creation_time = 0 #Set when new beacon is generated
         # Log 'ack's from rx'ers for current packet here
-        self._ack_rx_set = set()
+        self._end_rx_set = set()
+        self._start_rx_set = set()
 
         # "Sense" state vars
         self.ifs_cnt = IFS_TIME
@@ -191,7 +192,7 @@ class DSRC_Node:
             self.tx_origin = tx_uuid
             self.tx_msg_id = msg_uuid
             self.tx_seq = this_seq
-            #tx_node._ack_start(self)
+            tx_node._ack_start(self)
 
         elif (tx_uuid != self.tx_origin) or\
              (msg_uuid != self.tx_msg_id) or\
@@ -306,7 +307,8 @@ class DSRC_Node:
             self.ifs_cnt = IFS_TIME
             self._gen_new_CW()
             self.bit_cnt = PACKET_SIZE
-            self._ack_rx_set.clear()
+            self._start_rx_set.clear()
+            self._end_rx_set.clear()
             self._clear_message()
 
         elif self.cs is State.sense:
@@ -323,7 +325,8 @@ class DSRC_Node:
             self._log_finished_message()
             #(Cleanup after magical logging)
             self.bit_cnt = PACKET_SIZE
-            self._ack_rx_set.clear()
+            self._start_rx_set.clear()
+            self._end_rx_set.clear()
             self._clear_message()
 
         else:
@@ -337,13 +340,11 @@ class DSRC_Node:
     # Logging Magic
     ###########################################################################
 
-    """
     def _ack_start(self, rx_node):
         self._start_rx_set.add(rx_node)
-    """
 
     def _ack_end(self, rx_node):
-        self._ack_rx_set.add(rx_node)
+        self._end_rx_set.add(rx_node)
 
     """
     Log stats about the finished message to disk
@@ -354,13 +355,18 @@ class DSRC_Node:
             (self.x > TX_RANGE) and\
             (self.x < ROAD_LIMIT - TX_RANGE):
 
-            rcvd_set_sz = len(self._ack_rx_set)
-            rcvd_set_str = "".join(\
-                "{:n} ".format(node.uuid) for node in self._ack_rx_set)
+            start_set_sz = len(self._start_rx_set)
+            start_set_str = "".join(\
+                "{:n} ".format(node.uuid) for node in self._start_rx_set)
+
+            end_set_sz = len(self._end_rx_set)
+            end_set_str = "".join(\
+                "{:n} ".format(node.uuid) for node in self._end_rx_set)
 
             self.logger.log_packet(self.packet_id, self.x,\
                                    self.packet_creation_time,\
                                    self.sys_clock.timenow(),\
                                    self._tx_start_density, self.local_density,\
-                                   rcvd_set_sz, rcvd_set_str)
+                                   start_set_sz, start_set_str,\
+                                   end_set_sz, end_set_str)
 

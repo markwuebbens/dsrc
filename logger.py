@@ -8,11 +8,14 @@ class Header_Ln:
 class Packet_Ln:
     @staticmethod
     def to_str(pkt_id, node_x, gen_time, end_time,\
-               start_density, end_density, rcvd_sz, rcvd_str):
+               start_density, end_density,\
+               start_sz, start_str, end_sz, end_str):
 
-        return "{:n} x={:.3f}|{:.6f} {:.6f}|{:n} {:n} {:n}|{}\n".format(\
-            pkt_id, node_x, gen_time, end_time,\
-            start_density, end_density, rcvd_sz, rcvd_str)
+        return "{:n}@{:.3f}m|{:.6f} {:.6f}|{:n} {:n}|{:n}-{}|{:n}-{}\n".format(\
+            pkt_id, node_x,\
+            gen_time, end_time,\
+            start_density, end_density,\
+            start_sz, start_str, end_sz, end_str)
 
 class DSRC_Logger:
 
@@ -40,12 +43,14 @@ class DSRC_Node_Logger(DSRC_Logger):
     def log_packet(self, pkt_id, node_x,\
                     gen_time, end_time,\
                     start_density, end_density,\
-                    rcvd_set_sz, rcvd_set_str):
+                    start_sz, start_str,\
+                    end_sz, end_str):
 
         self.append_line(Packet_Ln.to_str(\
                 pkt_id, node_x, gen_time, end_time,\
                 start_density, end_density,\
-                rcvd_set_sz, rcvd_set_str))
+                start_sz, start_str,\
+                end_sz, end_str))
 
 class DSRC_Sim_Logger(DSRC_Logger):
     def __init__(self, log_dir):
