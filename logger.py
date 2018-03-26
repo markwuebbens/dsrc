@@ -57,14 +57,13 @@ class DSRC_Sim_Logger(DSRC_Logger):
         DSRC_Logger.__init__(self, log_dir, "sim_settings.log")
 
     def create_intro(self, clock, timenow):
-        out  = "<--- HELLO. <{}>--->\n".format(timenow)
-        out += "We are simulating a straight, uni-directional highway which is {} m long\n".format(ROAD_LIMIT)
-        out += "The traffic density is set at {} veh/m\n".format(VEH_DENSITY)
-        out += "Vehicles are traveling uniformly between {} and {} m/s\n".format(AVG_SPEED-SPEED_DELTA, AVG_SPEED+SPEED_DELTA)
-        out += "The simulation runs at increments of {} s\n".format(clock.dt)
-        out += "Vehicles are transmitting safety beacons over a {} m range\n".format(TX_RANGE)
-        out += "msg len = {} bits, tx_rate = {} bps, time to tx = {} s\n".format(PACKET_SIZE, TX_RATE, PACKET_SIZE/TX_RATE)
-        out += "The CW window is set to: 0 <= CW <= {} s\n".format(CW_NOMINAL*SLOT_TIME)
+        out =  "We are simulating a straight, uni-directional highway which is {}m long\n".format(ROAD_LIMIT)
+        out += "The traffic density is {}veh/m\n".format(VEH_DENSITY)
+        out += "Vehicles travel at constant speed chosen uniformly between: {}<=v<={}m/s\n".format(AVG_SPEED-SPEED_DELTA, AVG_SPEED+SPEED_DELTA)
+        out += "Transmision radius = {}m\n".format(TX_RANGE)
+        out += "The transmission window is: 0<=CW<={}s\n".format(CW_NOMINAL*SLOT_TIME)
+        out += "The sim runs in increments of {}s\n".format(clock.dt)
+        out += "msg_len = {}b, tx_rate = {}b, tx_time = {}s\n".format(PACKET_SIZE, TX_RATE, PACKET_SIZE/TX_RATE)
         return out
 
     def create_summary(self, clock, network, num_finished, timenow):
