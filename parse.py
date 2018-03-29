@@ -67,7 +67,7 @@ def scrape_directory(directory):
 
 def print_final_stats():
 
-    print '{}\t{}\t{}'.format('rho', 'sz', 'rate')
+    print '{},{},{}'.format('rho', 'sz', 'rate')
     for rho in Sum_Cnt_By_Rho_dict:
 
         (this_sum, this_cnt) = Sum_Cnt_By_Rho_dict[rho]
@@ -75,7 +75,7 @@ def print_final_stats():
         avg_rate = (this_sum*1.0)/(rho*this_cnt)
 
     
-        print '{}\t{}\t{}'.format(rho, this_cnt, avg_rate)
+        print '{},{},{}'.format(rho, this_cnt, avg_rate)
 
 
 
