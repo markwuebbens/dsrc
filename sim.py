@@ -1,17 +1,19 @@
 #!/usr/bin/python
 
 import os
+import sys
+import argparse
 import random
+from time import strftime
 from network import DSRC_Network
 from logger import DSRC_Sim_Logger
-from node import DSRC_Node, State
-from time import strftime
+from config import SLOT_TIME, BEACON_PERIOD
 
-from config import *
+#Road definitions
+Road_Limit = 500.0 #m
 
-node_id = 0
-log_dir = strftime("%d%m%Y_%H%M%S") + "_log/"
-os.mkdir(log_dir)
+#Sim definitions
+End_Time = 5.0 * 60 #s
 
 class Clock():
     def __init__(self):
@@ -22,80 +24,123 @@ class Clock():
     def tick(self):
         self.time += self.dt
         self.ticks += 1
-        #print "TICK! {}".format(self.time)
 
     def timenow(self):
         return self.time
 
-def generate_node(clock, network, init_x = 0):
+    def stepsize(self):
+        return self.dt
 
-    global node_id
-    global sim_dir
-    coin_toss = random.random()
+class CW_Generator():
+    def __init__(self, CW_POWER):
+        assert ((CW_POWER > 0.0) and (2**(CW_POWER*1.0) * SLOT_TIME < BEACON_PERIOD / 10.0)), "CW_POWER out of bounds"
 
-    density_weight = clock.dt * AVG_SPEED * VEH_DENSITY #s * m/s * veh/m
+        self.cw_power = CW_POWER
+        self.cw_nom = 2 ** (CW_POWER * 1.0) #units of slots
+        self.cw_max_delay = self.cw_nom * SLOT_TIME #units of seconds
 
-    if (coin_toss < density_weight):
+    def gen(self):
+        val = random.uniform(0, self.cw_max_delay)
+        assert val, "gen {}".format(val)
+        return val
 
-        velocity = random.uniform(AVG_SPEED-SPEED_DELTA, AVG_SPEED+SPEED_DELTA)
-        node = DSRC_Node(node_id, init_x, velocity, clock, log_dir)
-        node_id += 1
+    def max_delay(self):
+        return self.cw_max_delay
 
-        network.add_node(node)
-
-def generate_initial_traffic(clock, network):
-    marker = ROAD_LIMIT;
-
-    while (marker > 0):
-        node = generate_node(clock, network, marker)
-
-        marker -= clock.dt * AVG_SPEED
 
 def main():
 
-    clock = Clock()
+    global Road_Limit, End_Time
 
-    this_network = DSRC_Network(clock)
-    generate_initial_traffic(clock, this_network)
+    parser = argparse.ArgumentParser(description='A Simulator')
+    parser.add_argument("tx_range",
+                        help="Transmision range (~10-100)(m)",
+                        type=float)
+    parser.add_argument("cw_power",
+                        help="The exponent to determine CW backoff time",
+                        type=float)
+    parser.add_argument("veh_density",
+                        help="Rho, the average vehicular density (veh/m)",
+                        type=float)
+    parser.add_argument("avg_speed", help="Avg vehicular speed (m/s)", type=float)
+    parser.add_argument("speed_delta", help="The delta speed value (m/s)", type=float)
+    args = parser.parse_args()
 
-    this_logger = DSRC_Sim_Logger(log_dir)
-    this_logger.write_intro(clock, strftime("%d%m%Y_%H%M%S"))
+    try: #Input sanitization
 
-    num_finished = 0
+        # Sanitize TX_RANGE
+        #Max tx_range of 1 fifth of the road length
+        assert ((args.tx_range > 0.0) and (args.tx_range * 5.0 < Road_Limit)),\
+               "TX_RANGE {} {}".format(args.tx_range, Road_Limit)
 
-    while(1):
-        #print "time:{:.6f}, timenow:{:.6f}".format(clock.time, clock.timenow())
+        # Sanitize  AVG_SPEED
+        #Max speed of ~220 mph
+        assert ((args.avg_speed > 0.0) and (args.avg_speed < 100.0)), "AVG_SPEED"
 
-        #generate and add new nodes
-        generate_node(clock, this_network)
+        # Sanitize  SPEED_DELTA
+        #totally arbitrary max speed_delta... :3
+        assert ((args.speed_delta > 0.0) and (args.speed_delta < 40)), "SPEED_DELTA"
 
-        #Execute one logical step of the simulation
-        # -Each node: Moves forward logically in time and space
-        # -'Finished' nodes are removed from the network and returned
-        finished_nodes = this_network.step_sim()
-        num_finished += len(finished_nodes)
+        # Sanitize  VEH_DENSITY
+        #Max denisty of one vehicle per every meter... (still kind of arbitrary)
+        assert ((args.veh_density > 0.0) and (args.veh_density < 1.0)), "VEH_DENSITY"
 
-        #Network arbitrates message tx'ing and collision for curr state
-        # -First sorts tx_nodes and all_nodes lists sorted here
-        # -Each node: Receives any valid transmission
-        #             Receives it's current local channel state
-        #
-        # MUST BE CALLED BEFORE network.transition_sim()!
-        this_network.arbitrate_channel_conditions()
+        # Sanitize  CW_POWER
+        #Max power arbitrarily 1000
+        assert ((args.cw_power > 0.0) and (args.cw_power < 1000))
 
-        #Network elements increment logically in time and space
-        # -Each node: Executes (cs -> ns) in the DSRC FSM according to local
-        #   conditions
-        this_network.transition_sim()
+        #Init a CW generator which will describe the CW characteristics of this sim
+        cw_generator = CW_Generator(args.cw_power)
 
-        #Finish at some point...
-        if (clock.timenow() > END_TIME):
-            this_logger.write_summary(clock, this_network, num_finished,
-                                      strftime("%d%m%Y_%H%M%S"))
-            exit(1)
 
-        clock.tick()
+    except Exception as e:
+        print "FUUUUUCK"
+        sys.exit
 
+    else:
+
+        Log_Dir = "{}_{:n}m_{:n}mps_{:.4f}vpm_{:.6f}s/".format(\
+                  strftime("%m%d_%H%M%S"),\
+                  args.tx_range, args.avg_speed,\
+                  args.veh_density, cw_generator.max_delay())
+
+        #IMPORTANTE! - Create the output dir
+        os.mkdir(Log_Dir)
+
+        num_finished = 0
+
+        #Init the system clock
+        sysclock = Clock()
+
+        #Init the simulated network, (creates a road filled with vehicles)
+        this_network = DSRC_Network(sysclock, Log_Dir,\
+                                    args.avg_speed, args.speed_delta, args.veh_density,\
+                                    cw_generator, args.tx_range, Road_Limit)
+
+        #Init a logger for the simulation
+        this_sim_logger = DSRC_Sim_Logger(sysclock.stepsize(),\
+                                    strftime("%m%d_%H%M%S"),\
+                                    Log_Dir, args.veh_density, args.tx_range,\
+                                    cw_generator.max_delay(),\
+                                    args.avg_speed, args.speed_delta, Road_Limit)
+
+
+        #Run the network until end times come
+        while(sysclock.timenow() < End_Time):
+
+            #Execute one logical step of the simulation
+            finished_nodes = this_network.step()
+            num_finished += len(finished_nodes)
+            sysclock.tick()
+
+
+        #Log some summary values
+        this_sim_logger.write_summary(sysclock.timenow(),\
+                                        num_finished,\
+                                        strftime("%m%d_%H%M%S"))
+
+        print "GG No RE"
+        sys.exit()
 
 main()
 

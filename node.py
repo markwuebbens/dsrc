@@ -1,24 +1,16 @@
 import random
 import string
-from config import *
+from config import SLOT_TIME, BEACON_PERIOD, PACKET_SIZE, IFS_TIME, TX_RATE
 from logger import DSRC_Node_Logger
 
 class State:
     idle, sense, count, tx = ("idle", "sense", "count", "tx")
 
-class CW_PRNG:
-    @staticmethod
-    def gen_CW():
-        #FIXME - Double check that's correct
-        val = random.uniform(0, CW_NOMINAL * 1.0 * SLOT_TIME)
-        if not val: assert 0, "CW_PRNG {}".format(val)
-        return val
-
 class Beacon_PRNG:
     @staticmethod
     def gen_beacon():
         val = random.uniform(0, BEACON_PERIOD)
-        if not val: assert 0, "Beacon_PRNG {}".format(val)
+        assert val, "Beacon_PRNG {}".format(val)
         return val
 
 
@@ -45,38 +37,41 @@ class Message_Piece:
 
 class DSRC_Node:
 
-    def __init__(self, uuid, init_x, init_v, clock, log_dir):
+    def __init__(self, clock, log_dir,\
+                 uuid, init_x, init_v,\
+                 CW_Generator, TX_Range, Road_Limit):
 
         self.cs = State.idle
 
         self.uuid = uuid
         self.name = Name_Generator.gen(uuid)
-        self.sys_clock = clock
 
-        self.logger = DSRC_Node_Logger(log_dir, uuid, clock.timenow())
+        self.sysclock = clock
+
+        self.logger = DSRC_Node_Logger(log_dir, str(uuid), clock.timenow())
 
         # Road related vars
         self.x = init_x
         self.v = init_v
+        self.limit = Road_Limit
         self.is_finished = False
+
+        # DSRC config specific values
+        self.tx_range = TX_Range
+        self.cw_generator = CW_Generator
 
         #Local channel conditions (updated by network each step)
         self.channel_is_idle = False
         self.local_density = 0
 
-        # Beaconing logic vars
+        # Beaconing state vars
         self.beacon_counter = Beacon_PRNG.gen_beacon()
-        self.packet_creation_time = 0 #Set when new beacon is generated
-        # Log 'ack's from rx'ers for current packet here
-        self._end_rx_set = set()
-        self._start_rx_set = set()
 
         # "Sense" state vars
         self.ifs_cnt = IFS_TIME
 
         # "Count" state vars
         self.cw_cnt = 0
-        self.generator = CW_PRNG()
         self._gen_new_CW()
 
         # "Tx" state vars
@@ -92,7 +87,13 @@ class DSRC_Node:
         ##############################
         # "Extra" vars for statistics
         ##############################
-        self._tx_start_density = 0
+
+        # RX logging/ack'ing vars
+        self.packet_creation_time = 0 #Set when new beacon is generated
+        self.end_rx_set = set()
+        self.start_rx_set = set()
+
+        self.tx_start_density = 0
 
 
     ###########################################################################
@@ -117,6 +118,12 @@ class DSRC_Node:
 
         elif (self.cs is State.count):
             self._step_count_state()
+
+        elif (self.cs is State.idle):
+            pass
+
+        else:
+            assert 0, "Whoops, step_logical"
 
         ##############################
         # Periodic Beacon generation #
@@ -152,14 +159,14 @@ class DSRC_Node:
                 if (self.cw_cnt <= 0):
                     new_state = State.tx
                     #FIXME
-                    self._tx_start_density = self.local_density
+                    self.tx_start_density = self.local_density
             else:
                 new_state = State.sense
 
         if (self.beacon_counter <= 0):
             #Beacon period has elapsed. Generate new beacon
             self.beacon_counter = BEACON_PERIOD
-            self.packet_creation_time = self.sys_clock.timenow()
+            self.packet_creation_time = self.sysclock.timenow()
             new_state = State.sense
 
         if new_state != None:
@@ -211,11 +218,11 @@ class DSRC_Node:
                 tx_node._ack_end(self)
 
     def in_hi_range_of(self, other_x):
-        return (other_x < self.x) and (other_x + TX_RANGE >= self.x)
+        return (other_x < self.x) and (other_x + self.tx_range >= self.x)
 
 
     def in_lo_range_of(self, other_x):
-        return (other_x >= self.x) and (self.x + TX_RANGE >= other_x)
+        return (other_x >= self.x) and (self.x + self.tx_range >= other_x)
 
     def in_range_of(self, other_x):
         return self.in_hi_range_of(other_x) or\
@@ -229,7 +236,7 @@ class DSRC_Node:
     """
     def _gen_new_CW(self):
 
-        val = self.generator.gen_CW()
+        val = self.cw_generator.gen()
         assert(val), "_gen_new_CW"
         self.cw_cnt = val
 
@@ -246,7 +253,7 @@ class DSRC_Node:
     """
     def _step_tx_state(self):
 
-        self.bit_cnt -= self.sys_clock.dt * TX_RATE
+        self.bit_cnt -= self.sysclock.stepsize() * TX_RATE
 
         if self.message is None:
             #First time here: generate new message object
@@ -263,7 +270,7 @@ class DSRC_Node:
     """
     def _step_sense_state(self):
 
-        self.ifs_cnt -= self.sys_clock.dt
+        self.ifs_cnt -= self.sysclock.stepsize()
 
 
     """
@@ -272,7 +279,7 @@ class DSRC_Node:
     """
     def _step_count_state(self):
 
-        self.cw_cnt -= self.sys_clock.dt
+        self.cw_cnt -= self.sysclock.stepsize()
 
 
     """
@@ -280,7 +287,7 @@ class DSRC_Node:
     """
     def _step_beacon(self):
 
-        self.beacon_counter -= self.sys_clock.dt
+        self.beacon_counter -= self.sysclock.stepsize()
 
 
     """
@@ -289,9 +296,9 @@ class DSRC_Node:
     """
     def _step_traffic(self):
 
-        self.x = self.x + (self.sys_clock.dt * self.v)
+        self.x = self.x + (self.sysclock.stepsize() * self.v)
 
-        self.is_finished = (self.x > ROAD_LIMIT)
+        self.is_finished = (self.x > self.limit)
 
 
     """
@@ -307,8 +314,8 @@ class DSRC_Node:
             self.ifs_cnt = IFS_TIME
             self._gen_new_CW()
             self.bit_cnt = PACKET_SIZE
-            self._start_rx_set.clear()
-            self._end_rx_set.clear()
+            self.start_rx_set.clear()
+            self.end_rx_set.clear()
             self._clear_message()
 
         elif self.cs is State.sense:
@@ -325,8 +332,8 @@ class DSRC_Node:
             self._log_finished_message()
             #(Cleanup after magical logging)
             self.bit_cnt = PACKET_SIZE
-            self._start_rx_set.clear()
-            self._end_rx_set.clear()
+            self.start_rx_set.clear()
+            self.end_rx_set.clear()
             self._clear_message()
 
         else:
@@ -341,32 +348,32 @@ class DSRC_Node:
     ###########################################################################
 
     def _ack_start(self, rx_node):
-        self._start_rx_set.add(rx_node)
+        self.start_rx_set.add(rx_node)
 
     def _ack_end(self, rx_node):
-        self._end_rx_set.add(rx_node)
+        self.end_rx_set.add(rx_node)
 
     """
     Log stats about the finished message to disk
     """
     def _log_finished_message(self):
 
-        if (self.sys_clock.timenow() > 0.3) and\
-            (self.x > TX_RANGE) and\
-            (self.x < ROAD_LIMIT - TX_RANGE):
+        if (self.sysclock.timenow() > 0.3) and\
+            (self.x > self.tx_range) and\
+            (self.x < self.limit - self.tx_range):
 
-            start_set_sz = len(self._start_rx_set)
+            start_set_sz = len(self.start_rx_set)
             start_set_str = "".join(\
-                "{:n} ".format(node.uuid) for node in self._start_rx_set)
+                "{:n} ".format(node.uuid) for node in self.start_rx_set)
 
-            end_set_sz = len(self._end_rx_set)
+            end_set_sz = len(self.end_rx_set)
             end_set_str = "".join(\
-                "{:n} ".format(node.uuid) for node in self._end_rx_set)
+                "{:n} ".format(node.uuid) for node in self.end_rx_set)
 
             self.logger.log_packet(self.packet_id, self.x,\
                                    self.packet_creation_time,\
-                                   self.sys_clock.timenow(),\
-                                   self._tx_start_density, self.local_density,\
+                                   self.sysclock.timenow(),\
+                                   self.tx_start_density, self.local_density,\
                                    start_set_sz, start_set_str,\
                                    end_set_sz, end_set_str)
 

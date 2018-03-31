@@ -3,17 +3,30 @@ import math
 import random
 
 from node import State, DSRC_Node
-from config import *
-#from sim import SLOT_TIME, IFS_TIME, TX_RATE, TX_RANGE, SIM_LIMIT
 
 class DSRC_Network:
 
-    def __init__(self, clock):
+    def __init__(self, clock, log_dir,\
+                 Avg_Speed, Speed_Delta, Avg_Density,\
+                 CW_Generator, TX_Range, Road_Limit):
 
-        self.sys_clock = clock
+        self.sysclock = clock
+        self.log_dir = log_dir
+
+        #Config vars for the network
+        self.Avg_Speed = Avg_Speed
+        self.Speed_Delta = Speed_Delta
+        self.Avg_Density = Avg_Density
+
+        #Config vars passed to the nodes
+        self.CW_Generator = CW_Generator
+        self.TX_Range = TX_Range
+        self.Road_Limit = Road_Limit
 
         #Total num nodes simulated in the network
         self.total_cnt = 0
+
+        self.next_node_id = 0
 
         #Set of ALL nodes in simulation
         self.all_nodes = set()
@@ -21,27 +34,51 @@ class DSRC_Network:
         #List of nodes which are tx'ing
         self.tx_nodes = set()
 
+        #Fill the length of the road with vehicles
+        marker = Road_Limit;
+        while (marker > 0):
+
+            self._generate_node(marker)
+            marker -= self.sysclock.stepsize() * self.Avg_Speed
+
 
     ###########################################################################
-    # Public Class Methods
+    # Private Class Methods
     ###########################################################################
     """
-    Add a node to the network
+    Add a node to the network with probability 'density_weight'
     """
-    def add_node(self, node):
-        self.all_nodes.add(node)
-        self.total_cnt += 1
+    def _generate_node(self, init_x = 0):
+
+        coin_toss = random.random()
+
+        density_weight = self.sysclock.stepsize() * self.Avg_Speed * self.Avg_Density #s * m/s * veh/m
+
+        if (coin_toss < density_weight):
+
+            velocity = random.uniform(self.Avg_Speed - self.Speed_Delta,\
+                                      self.Avg_Speed + self.Speed_Delta)
+
+            node = DSRC_Node(self.sysclock, self.log_dir,\
+                            self.next_node_id, init_x, velocity,\
+                            self.CW_Generator, self.TX_Range, self.Road_Limit)
+
+            self.next_node_id += 1
+            self.all_nodes.add(node)
+            self.total_cnt += 1
 
     """
     Perform one step of the top level traffic simulation
-        -Each node in the network steps thru the dsrc fsm independently
+        -Each node in the network executes their state independently
         -Nodes increment in space and time, updating counters and state
         -Nodes considered 'finished' are removed and returned
     """
-    def step_sim(self):
+    def _step_logical(self):
 
         finished_nodes = set()
         self.tx_nodes = set()
+
+        self._generate_node()
 
         for node in self.all_nodes:
 
@@ -63,7 +100,7 @@ class DSRC_Network:
     """
     Network informs each node of any valid transmissions and of local channel conditions
     """
-    def arbitrate_channel_conditions(self):
+    def _arbitrate_channel_conditions(self):
 
         tx_sorted = sorted(self.tx_nodes, key=lambda node: node.x)
         len_txers = len(tx_sorted)
@@ -144,8 +181,43 @@ class DSRC_Network:
     Transitions all nodes in network to the assigned next state
         -Requires 'channel_is_idle' set for each node
     """
-    def transition_sim(self):
+    def _transition_sim(self):
 
         for node in self.all_nodes:
 
             node.transition_state()
+
+    ###########################################################################
+    # Public Class Methods
+    ###########################################################################
+    """
+    Each node steps forward logically and independently
+    Channel conditions are determined for the entire network
+    Each node transitions according to local conditions
+    """
+    def step(self):
+
+        # -Each node: Moves forward logically in time and space
+        # -'Finished' nodes are removed from the network and returned
+        finished_nodes = self._step_logical()
+
+
+        #Network arbitrates message tx'ing and collision for curr state
+        # -First sorts tx_nodes and all_nodes lists
+        # -Each node: Receives a valid transmission
+        #             Receives it's current local channel state
+        # @REQUIRES - network._step_logical() has been called!
+        self._arbitrate_channel_conditions()
+
+
+        #Network elements increment logically in time and space
+        # -Each node: Executes (cs -> ns) in the DSRC FSM according to local
+        #   conditions
+        # @REQUIRES - network.arbitrate_channel_conditions() has been called!
+        self._transition_sim()
+
+        return finished_nodes
+
+
+
+
