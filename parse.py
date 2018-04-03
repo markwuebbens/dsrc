@@ -5,7 +5,7 @@ Road_Limit = 500 #m
 TX_Range = None
 Sum_Cnt_By_Rho_dict = {}
 
-def scrape_node(filename):
+def scrape_node(directory, filename):
 
 
     global Sum_Cnt_By_Rho_dict
@@ -16,7 +16,7 @@ def scrape_node(filename):
 
     #print 'ello from {}'.format(node_num)
 
-    with open(filename, 'r') as file:
+    with open(directory + filename, 'r') as file:
 
 
         for line in file:
@@ -47,11 +47,17 @@ def scrape_node(filename):
             else:
 
                 x_coord = float(location[:-1])
-                if (x_coord > Road_Limit - (TX_Range * 1.5)) or\
-                   (x_coord < TX_Range * 1.5):
+                if (x_coord > (Road_Limit - (TX_Range * 2))) or\
+                   (x_coord < (TX_Range * 2)):
                     continue
 
-                if this_density in Sum_Cnt_By_Rho_dict:
+                if this_density == 0:
+                    print "Weirdness: '{}'".format(line)
+                    print "node_num={}, loc={}, start_str='{}', end_str='{}'".format(node_num, location, toks[3], toks[4])
+                    print x_coord
+                    continue
+
+                elif this_density in Sum_Cnt_By_Rho_dict:
 
                     (sum_now, cnt_now) = Sum_Cnt_By_Rho_dict[this_density]
 
@@ -82,7 +88,7 @@ def scrape_directory(directory):
     else:
         for filename in os.listdir(directory):
             if filename.endswith('.log'):
-                scrape_node(directory + filename)
+                scrape_node(directory, filename)
 
 def print_final_stats():
 
@@ -90,6 +96,10 @@ def print_final_stats():
     for rho in Sum_Cnt_By_Rho_dict:
 
         (this_sum, this_cnt) = Sum_Cnt_By_Rho_dict[rho]
+
+        if (rho*this_cnt <= 0):
+            print "FIXME!: rho={}, samples={}".format(rho, this_cnt)
+            continue
 
         avg_rate = (this_sum*1.0)/(rho*this_cnt)
 
