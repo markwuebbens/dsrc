@@ -33,7 +33,7 @@ class Clock():
 
 class CW_Generator():
     def __init__(self, CW_POWER):
-        assert ((CW_POWER > 0.0) and (2**(CW_POWER*1.0) * SLOT_TIME < BEACON_PERIOD / 10.0)), "CW_POWER out of bounds"
+        assert ((CW_POWER > 0.0) and (2**(CW_POWER*1.0) * SLOT_TIME < BEACON_PERIOD / 10.0)), "CW_POWER out of bounds {}".format(CW_POWER)
 
         self.cw_power = CW_POWER
         self.cw_nom = 2 ** (CW_POWER * 1.0) #units of slots
@@ -94,6 +94,7 @@ def main():
 
 
     except Exception as e:
+        print e.message, e.args
         print "FUUUUUCK"
         sys.exit
 
