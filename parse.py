@@ -1,14 +1,16 @@
 import sys
 import os
 
-from config import ROAD_LIMIT, TX_RANGE
-
+Road_Limit = 500 #m
+TX_Range = None
 Sum_Cnt_By_Rho_dict = {}
 
 def scrape_node(filename):
 
 
     global Sum_Cnt_By_Rho_dict
+    global Road_Limit
+    global TX_Range
 
     node_num = filename.split('_')[0]
 
@@ -45,8 +47,8 @@ def scrape_node(filename):
             else:
 
                 x_coord = float(location[:-1])
-                if (x_coord > ROAD_LIMIT - (TX_RANGE * 1.5)) or\
-                   (x_coord < TX_RANGE * 1.5):
+                if (x_coord > Road_Limit - (TX_Range * 1.5)) or\
+                   (x_coord < TX_Range * 1.5):
                     continue
 
                 if this_density in Sum_Cnt_By_Rho_dict:
@@ -61,9 +63,26 @@ def scrape_node(filename):
 
 def scrape_directory(directory):
 
-    for filename in os.listdir(directory):
-        if filename.endswith('.log'):
-            scrape_node(directory + filename)
+    toks = directory[:-1].split('_')
+    global TX_Range
+
+    try:
+        max_cw   = toks[-1][:-1] #s
+        rho      = toks[-2][:-3] #vpn
+        avg_vel  = toks[-3][:-3] #mps
+        tx_range = toks[-4][:-1] #m
+
+        TX_Range = float(tx_range)
+
+    except Exception as e:
+        print e.message
+        print e.args
+        sys.exit
+
+    else:
+        for filename in os.listdir(directory):
+            if filename.endswith('.log'):
+                scrape_node(directory + filename)
 
 def print_final_stats():
 
