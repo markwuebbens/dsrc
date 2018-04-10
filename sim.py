@@ -33,7 +33,7 @@ class Clock():
 
 class CW_Generator():
     def __init__(self, CW_POWER):
-        assert ((CW_POWER > 0.0) and (2**(CW_POWER*1.0) * SLOT_TIME < BEACON_PERIOD / 10.0)), "CW_POWER out of bounds {}".format(CW_POWER)
+        assert (CW_POWER >= 2) and (2**(1.0*CW_POWER) * SLOT_TIME < BEACON_PERIOD / 10.0), "CW_POWER out of bounds {}".format(CW_POWER)
 
         self.cw_power = CW_POWER
         self.cw_nom = 2 ** (CW_POWER * 1.0) #units of slots
@@ -85,23 +85,20 @@ def main():
         #Max denisty of one vehicle per every meter... (still kind of arbitrary)
         assert ((args.veh_density > 0.0) and (args.veh_density < 1.0)), "VEH_DENSITY"
 
-        # Sanitize  CW_POWER
-        #Max power arbitrarily 1000
-        assert ((args.cw_power > 0.0) and (args.cw_power < 1000))
-
         #Init a CW generator which will describe the CW characteristics of this sim
+        #Generator sanitizes it's own input
         cw_generator = CW_Generator(args.cw_power)
 
 
     except Exception as e:
         print e.message, e.args
-        print "FUUUUUCK"
+        print "Failed to parse inputs... :("
         sys.exit
 
     else:
 
         Log_Dir = "{}_{:n}m_{:n}mps_{:.4f}vpm_{:.6f}s/".format(\
-                  strftime("%m%d_%H%M%S"),\
+                  strftime("%m%d%H%M%S"),\
                   args.tx_range, args.avg_speed,\
                   args.veh_density, cw_generator.max_delay())
 
@@ -120,7 +117,7 @@ def main():
 
         #Init a logger for the simulation
         this_sim_logger = DSRC_Sim_Logger(sysclock.stepsize(),\
-                                    strftime("%m%d_%H%M%S"),\
+                                    strftime("%m%d%H%M%S"),\
                                     Log_Dir, args.veh_density, args.tx_range,\
                                     cw_generator.max_delay(),\
                                     args.avg_speed, args.speed_delta, Road_Limit)
@@ -138,7 +135,7 @@ def main():
         #Log some summary values
         this_sim_logger.write_summary(sysclock.timenow(),\
                                         num_finished,\
-                                        strftime("%m%d_%H%M%S"))
+                                        strftime("%m%d%H%M%S"))
 
         print "GG No RE"
         sys.exit()

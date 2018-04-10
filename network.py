@@ -129,7 +129,7 @@ class DSRC_Network:
             return lo_i
 
         def _find_hi_i(this_node, prev_i):
-            # (furthest node within range ahead of this one)
+            # (furthest node within range ahead of this one) (or this one)
             hi_i = prev_i
             while (prev_i + 1 < len_all):
                 if (this_node.in_lo_range_of(all_sorted[prev_i].x)) and\
