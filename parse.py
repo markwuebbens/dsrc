@@ -42,7 +42,7 @@ def scrape_sim_directory(ref_dir, sim_dir):
                         continue
                     if this_density <= 0:
                         #FIXME
-                        print "Weirdness: {}".format(line)
+                        print "Weirdness with node {}: {}".format(node_num, line)
                         continue
                     elif this_density in rho_dict:
                         (sum_now, cnt_now) = rho_dict[this_density]
@@ -92,7 +92,8 @@ def scrape_sim_directory(ref_dir, sim_dir):
 
 def scrape_batch(batch_dir):
     for filename in os.listdir(batch_dir):
-        scrape_sim_directory(batch_dir, filename + '/')
+        if (len(filename.split('_')) == 5):
+            scrape_sim_directory(batch_dir, filename + '/')
 
 scrape_batch(sys.argv[1])
 
