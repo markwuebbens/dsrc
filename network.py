@@ -71,7 +71,7 @@ class DSRC_Network:
     Perform one step of the top level traffic simulation
         -Each node in the network executes their state independently
         -Nodes increment in space and time, updating counters and state
-        -Nodes considered 'finished' are removed and returned
+        -Nodes that pass the road limit are marked as 'finished' and returned
     """
     def _step_logical(self):
 
@@ -91,9 +91,6 @@ class DSRC_Network:
             #Aggregate nodes which are tx'ing right now
             elif (node.cs is State.tx):
                 self.tx_nodes.add(node)
-
-        #Remove finished nodes from the network
-        self.all_nodes = self.all_nodes - finished_nodes
 
         return finished_nodes
 
@@ -181,8 +178,12 @@ class DSRC_Network:
     Transitions all nodes in network to the assigned next state
         -Requires 'channel_is_idle' set for each node
     """
-    def _transition_sim(self):
+    def _transition_sim(self, finished_nodes):
 
+        #Remove finished nodes from the network
+        self.all_nodes = self.all_nodes - finished_nodes
+
+        #Everyone else transitions to the next state
         for node in self.all_nodes:
 
             node.transition_state()
@@ -198,7 +199,7 @@ class DSRC_Network:
     def step(self):
 
         # -Each node: Moves forward logically in time and space
-        # -'Finished' nodes are removed from the network and returned
+        # -'Finished' nodes are returned
         finished_nodes = self._step_logical()
 
 
@@ -211,10 +212,11 @@ class DSRC_Network:
 
 
         #Network elements increment logically in time and space
+        # -'Finished' nodes are removed from the network
         # -Each node: Executes (cs -> ns) in the DSRC FSM according to local
         #   conditions
         # @REQUIRES - network.arbitrate_channel_conditions() has been called!
-        self._transition_sim()
+        self._transition_sim(finished_nodes)
 
         return finished_nodes
 
