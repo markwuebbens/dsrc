@@ -52,7 +52,8 @@ class DSRC_Network:
 
         coin_toss = random.random()
 
-        density_weight = self.sysclock.stepsize() * self.Avg_Speed * self.Avg_Density #s * m/s * veh/m
+        #s * m/s * veh/m
+        density_weight = self.sysclock.stepsize() * self.Avg_Speed * self.Avg_Density
 
         if (coin_toss < density_weight):
 
@@ -67,35 +68,16 @@ class DSRC_Network:
             self.all_nodes.add(node)
             self.total_cnt += 1
 
-    """
-    Perform one step of the top level traffic simulation
-        -Each node in the network executes their state independently
-        -Nodes increment in space and time, updating counters and state
-        -Nodes that pass the road limit are marked as 'finished' and returned
-    """
-    def _step_logical(self):
-
-        finished_nodes = set()
-        self.tx_nodes = set()
-
-        self._generate_node()
-
-        for node in self.all_nodes:
-
-            node.step_logical()
-
-            #Aggregate 'finished' nodes
-            if (node.is_finished):
-                finished_nodes.add(node)
-
-            #Aggregate nodes which are tx'ing right now
-            elif (node.cs is State.tx):
-                self.tx_nodes.add(node)
-
-        return finished_nodes
 
     """
     Network informs each node of any valid transmissions and of local channel conditions
+    -INPUT - (self.tx_nodes) a list of the nodes in the network which are transmitting
+           - (self.all_nodes) a list of all of the nodes in the network
+    -OUTPUT - For every node in the network determine:
+                -idle_channel: boolean indicating the channel is idle
+                -local_density: number of other vehicles within tx range
+                -valid_tx_node: a reference to a node which is tx'ing this step
+                                -OR- None
     """
     def _arbitrate_channel_conditions(self):
 
@@ -148,9 +130,10 @@ class DSRC_Network:
             hi_i = _find_hi_i(this_node, prev_hi_i)
 
             idle_channel = True
+            valid_txer = None
 
-            #Determine if tx'er nodes are in range
-            #Delivers message piece if single txer in range
+            #Determine if single valid tx'er node in range
+            #Also determines if channel is idle
             if  (lo_tx_i + 1 < len_txers) and\
                 (this_node.in_range_of(tx_sorted[lo_tx_i + 1].x)):
 
@@ -158,27 +141,45 @@ class DSRC_Network:
 
                 if not (this_node.in_range_of(tx_sorted[lo_tx_i].x)):
 
-                    this_node.receive_message_from(tx_sorted[lo_tx_i + 1])
+                    valid_txer = tx_sorted[lo_tx_i + 1]
 
             elif (lo_tx_i < len_txers) and\
                  (this_node.in_range_of(tx_sorted[lo_tx_i].x)):
 
                 idle_channel = False
 
-                this_node.receive_message_from(tx_sorted[lo_tx_i])
+                valid_txer = tx_sorted[lo_tx_i]
 
             #Update the node's local channel conditions
-            this_node.update_local_conditions(idle_channel, hi_i - lo_i)
+            this_node.update_local_conditions(idle_channel, hi_i - lo_i, valid_txer)
 
             prev_lo_tx_i = lo_tx_i
             prev_lo_i = lo_i
             prev_hi_i = hi_i
 
+
     """
-    Transitions all nodes in network to the assigned next state
-        -Requires 'channel_is_idle' set for each node
+    Perform one step of the top level traffic simulation
+        -Each node in the network executes their state independently
+        -Nodes increment in space and time, updating counters and state
+        -Nodes that pass the road limit are marked as 'finished' and returned
+        -Updates the list of txing nodes AFTER the step
+    -REQUIRES: _arbitrate_channel_conditions has been called
+    -OUTPUT - self.tx_nodes, the list of txing nodes
+    -RETURN - (finished_nodes) a list of the nodes considered 'finished'
     """
-    def _transition_sim(self, finished_nodes):
+    def _step_logical(self):
+
+        #Reset outputs of this step
+        finished_nodes = set()
+        self.tx_nodes = set()
+
+        #All Nodes in the network step forward
+        for node in self.all_nodes:
+
+            if (node.step()):
+                #Aggregate 'finished' nodes
+                finished_nodes.add(node)
 
         #Remove finished nodes from the network
         self.all_nodes = self.all_nodes - finished_nodes
@@ -186,39 +187,37 @@ class DSRC_Network:
         #Everyone else transitions to the next state
         for node in self.all_nodes:
 
-            node.transition_state()
+            if (node.transition_state()):
+                #Aggregate nodes which are tx'ing now
+                self.tx_nodes.add(node)
+
+        return finished_nodes
 
     ###########################################################################
     # Public Class Methods
     ###########################################################################
     """
-    Each node steps forward logically and independently
     Channel conditions are determined for the entire network
+    Each node steps forward logically and independently
     Each node transitions according to local conditions
     """
     def step(self):
 
-        # -Each node: Moves forward logically in time and space
-        # -'Finished' nodes are returned
-        finished_nodes = self._step_logical()
-
+        #Attempt to generate a new node
+        self._generate_node()
 
         #Network arbitrates message tx'ing and collision for curr state
         # -First sorts tx_nodes and all_nodes lists
         # -Each node: Receives a valid transmission
         #             Receives it's current local channel state
-        # @REQUIRES - network._step_logical() has been called!
         self._arbitrate_channel_conditions()
 
-
         #Network elements increment logically in time and space
-        # -'Finished' nodes are removed from the network
-        # -Each node: Executes (cs -> ns) in the DSRC FSM according to local
-        #   conditions
-        # @REQUIRES - network.arbitrate_channel_conditions() has been called!
-        self._transition_sim(finished_nodes)
-
-        return finished_nodes
+        # @REQUIRES - network._arbitrate_channel_conditions() has been called!
+        # -Each node: Moves forward logically in time and space
+        # -Each node: Executes (cs -> ns) in the DSRC beaconing FSM
+        # -'Finished' nodes are removed from the network and returned
+        return self._step_logical()
 
 
 

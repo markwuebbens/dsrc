@@ -9,10 +9,7 @@ class State:
 class Beacon_PRNG:
     @staticmethod
     def gen_beacon():
-        val = random.uniform(0, BEACON_PERIOD)
-        assert val, "Beacon_PRNG {}".format(val)
-        return val
-
+        return random.uniform(0, BEACON_PERIOD)
 
 class Name_Generator:
     @staticmethod
@@ -29,10 +26,11 @@ class Message_Piece:
         self.is_end = False
         self.seq_num = 0
 
-    def update(self, bit_cnt):
+    def update(self, bits_left, dt):
         self.seq_num += 1
         self.is_start = False
-        self.is_end = (bit_cnt <= 0)
+        self.is_end = (bits_left <= dt * TX_RATE)
+
 
 
 class DSRC_Node:
@@ -56,28 +54,31 @@ class DSRC_Node:
         self.limit = Road_Limit
         self.is_finished = False
 
-        # DSRC config specific values
+        # DSRC config parameters
         self.tx_range = TX_Range
         self.cw_generator = CW_Generator
 
-        #Local channel conditions (updated by network each step)
+        #Local channel conditions (updated by network before each step)
         self.channel_is_idle = False
         self.local_density = 0
 
         # Beaconing state vars
         self.beacon_counter = Beacon_PRNG.gen_beacon()
+        self.packet_creation_time = 0 #Set whenever new beacon is generated
 
         # "Sense" state vars
         self.ifs_cnt = IFS_TIME
 
         # "Count" state vars
         self.cw_cnt = 0
-        self._gen_new_CW()
 
         # "Tx" state vars
-        self.bit_cnt = PACKET_SIZE
+        self.tx_start_density = 0
+        self.tx_end_density = 0
+        self.bits_left = PACKET_SIZE
         self.packet_id = 0
         self.message = None
+
 
         # Receiver band vars
         self.tx_origin = None
@@ -89,139 +90,189 @@ class DSRC_Node:
         ##############################
 
         # RX logging/ack'ing vars
-        self.packet_creation_time = 0 #Set when new beacon is generated
         self.end_rx_set = set()
         self.start_rx_set = set()
 
-        self.tx_start_density = 0
 
 
     ###########################################################################
     # Public Class Methods
     ###########################################################################
 
+
+    """
+    Update internal understanding of the world
+    """
+    def update_local_conditions(self, is_idle, density, tx_node):
+
+        self.channel_is_idle = is_idle
+        self.local_density = density
+
+        if (tx_node):
+            #"You've got mail"
+
+            msg_piece = tx_node.get_message_piece()
+
+            tx_uuid = msg_piece.origin_uuid
+            tx_loc = msg_piece.location
+            msg_uuid = msg_piece.msg_uuid
+            this_seq = msg_piece.seq_num
+
+            if (msg_piece.is_start):
+                #Resets any previously held state...
+                self.tx_origin = tx_uuid
+                self.tx_msg_id = msg_uuid
+                self.tx_seq = this_seq
+                tx_node.ack_start_msg(self)
+
+            elif (tx_uuid != self.tx_origin) or\
+                 (msg_uuid != self.tx_msg_id) or\
+                 (this_seq != self.tx_seq + 1):
+                #Loss of continuity...
+                self.tx_origin = None
+                self.tx_msg_id = None
+                self.tx_seq = 0
+
+            else:
+                #Continuation of current message
+                self.tx_seq = this_seq
+
+                if msg_piece.is_end:
+                    #Completed Message!
+                    tx_node.ack_end_msg(self)
+
     """
     Execute relevant actions for this time step
         -Nodes step through a DSRC beaconing FSM
         -State specific actions executed here
+
     """
-    def step_logical(self):
+    def step(self):
 
         ############################
         # Execute actions by state #
         ############################
         if (self.cs is State.tx):
-            self._step_tx_state()
+
+            assert self.message is not None, "oops, step (tx_state message)"
+            self.bits_left -= self.sysclock.stepsize() * TX_RATE
+
+            #FIXME - hacky logging...
+            if (message.is_start):
+                self.tx_start_density = self.local_density
+            if (message.is_end):
+                self.tx_end_density = self.local_density
 
         elif (self.cs is State.sense):
-            self._step_sense_state()
+            self.ifs_cnt -= self.sysclock.stepsize()
 
         elif (self.cs is State.count):
-            self._step_count_state()
+            self.cw_cnt -= self.sysclock.stepsize()
 
         elif (self.cs is State.idle):
             pass
 
         else:
-            assert 0, "Whoops, step_logical"
+            assert 0, "Whoops, step"
 
-        ##############################
-        # Periodic Beacon generation #
-        ##############################
-        self._step_beacon()
+        ###############################
+        # Periodic Beacon MSG counter #
+        ###############################
+        self.beacon_counter -= self.sysclock.stepsize()
 
-        #############################################
-        # Step the node in simulated space          #
-        #    -Nodes 'finished' once past ROAD_LIMIT #
-        #############################################
-        self._step_traffic()
+        ##############################################
+        # Step the node in simulated space           #
+        # Labeled as 'finished' once past ROAD_LIMIT #
+        ##############################################
+        self.x = self.x + (self.sysclock.stepsize() * self.v)
+        self.is_finished = (self.x > self.limit)
+
+        return self.is_finished
+
 
     """
-    Transition cs->ns if applicable
-        -requires current 'channel_is_idle' value
+    Transition cs->ns as applicable
+    REQUIRES - current 'channel_is_idle' value
+    OUTPUT - 'message' piece if txing
+    RETURN - (self.cs == State.tx) - boolean indicating the node is now tx'ing
     """
     def transition_state(self):
 
         new_state = None
+
+        #Check for transition conditions on a per-state basis
         if self.cs is State.tx:
-            if (self.bit_cnt <= 0):
+            if (self.bits_left <= 0):
+                #Just finished TX'ing a packet
+                self._log_finished_tx()
                 new_state = State.idle
+            else:
+                #Update the message object
+                self.message.update(self.bits_left, self.sysclock.stepsize())
+
 
         elif self.cs is State.sense:
-            if (self.channel_is_idle):
-                if (self.ifs_cnt <= 0):
-                    new_state = State.count
-            else:
+            if not self.channel_is_idle:
+                #Reset ifs state when not idle
                 new_state = State.sense
+            elif (self.ifs_cnt <= 0):
+                #Interframe spacing period detected
+                new_state = State.count
 
         elif self.cs is State.count:
-            if (self.channel_is_idle):
-                if (self.cw_cnt <= 0):
-                    new_state = State.tx
-                    #FIXME
-                    self.tx_start_density = self.local_density
-            else:
+            if not self.channel_is_idle:
                 new_state = State.sense
+            elif (self.cw_cnt <= 0):
+                #CW window has elapsed, begin transmitting
+                new_state = State.tx
 
+        #Check for state transition caused by new beacon generation
         if (self.beacon_counter <= 0):
-            #Beacon period has elapsed. Generate new beacon
+            #Beacon period has elapsed, reset counter
             self.beacon_counter = BEACON_PERIOD
+            #Generate new beacon packet
             self.packet_creation_time = self.sysclock.timenow()
+            self.packet_id += 1
+            self.message = Message_Piece(self.uuid, self.packet_id, self.x)
+            #Generate a random CW for this packet
+            self._gen_new_CW()
+            #Try to gain access to channel
             new_state = State.sense
 
-        if new_state != None:
-            self._execute_transition(new_state)
+        #Execute transition to new state
+        if new_state is not None:
+            if (new_state is State.sense):
+                self.ifs_cnt = IFS_TIME
 
+            elif (new_state is State.tx):
+
+                self.tx_start_density = self.local_density
+
+                self.start_rx_set.clear()
+                self.end_rx_set.clear()
+
+                self.bits_left = PACKET_SIZE
+
+            self.cs = new_state
+
+        return (self.cs is State.tx)
 
     """
-    Update internal understanding of the world
+    Returns this node's message piece for the interval
     """
-    def update_local_conditions(self, is_idle, density):
+    def get_message_piece(self):
+        return self.message
 
-        self.channel_is_idle = is_idle
-        self.local_density = density
+    def ack_start_msg(self, rx_node):
+        self.start_rx_set.add(rx_node)
 
-
-    """
-    Receive the message piece transmitted from provided node
-    """
-    def receive_message_from(self, tx_node):
-
-        assert tx_node.message is not None
-
-        tx_uuid = tx_node.message.origin_uuid
-        tx_loc = tx_node.message.location
-        msg_uuid = tx_node.message.msg_uuid
-        this_seq = tx_node.message.seq_num
-
-        if (tx_node.message.is_start):
-            #Resets any previously held state...
-            self.tx_origin = tx_uuid
-            self.tx_msg_id = msg_uuid
-            self.tx_seq = this_seq
-            tx_node._ack_start(self)
-
-        elif (tx_uuid != self.tx_origin) or\
-             (msg_uuid != self.tx_msg_id) or\
-             (this_seq != self.tx_seq + 1):
-            #Loss of continuity...
-            self.tx_origin = None
-            self.tx_msg_id = None
-            self.tx_seq = 0
-
-        else:
-            #Continuation of current message
-            self.tx_seq = this_seq
-
-            if tx_node.message.is_end:
-                #Completed Message!
-                tx_node._ack_end(self)
+    def ack_end_msg(self, rx_node):
+        self.end_rx_set.add(rx_node)
 
     def in_hi_range_of(self, other_x):
         return (other_x < self.x) and (other_x + self.tx_range >= self.x)
 
-
-    def in_lo_range_of(self, other_x):
+    def in_lo_range_of(self, other_x):.
         return (other_x >= self.x) and (self.x + self.tx_range >= other_x)
 
     def in_range_of(self, other_x):
@@ -236,110 +287,10 @@ class DSRC_Node:
     """
     def _gen_new_CW(self):
 
+
         val = self.cw_generator.gen()
         assert(val), "_gen_new_CW"
         self.cw_cnt = val
-
-    """
-    Clears this node's message
-    """
-    def _clear_message(self):
-        self.message = None
-
-    """
-    Execute steps for transmitting node
-        -Creates the message this node will advertise this next step
-        -Decrements bit_cnt
-    """
-    def _step_tx_state(self):
-
-        self.bit_cnt -= self.sysclock.stepsize() * TX_RATE
-
-        if self.message is None:
-            #First time here: generate new message object
-            self.packet_id += 1
-            self.message = Message_Piece(self.uuid, self.packet_id, self.x)
-
-        else:
-            #Update the message object
-            self.message.update(self.bit_cnt)
-
-    """
-    Execute steps for sensing node
-        -Decrements ifs_cnt
-    """
-    def _step_sense_state(self):
-
-        self.ifs_cnt -= self.sysclock.stepsize()
-
-
-    """
-    Execute steps for counting node
-        -Decrements cw_cnt
-    """
-    def _step_count_state(self):
-
-        self.cw_cnt -= self.sysclock.stepsize()
-
-
-    """
-    Decrements beacon_counter
-    """
-    def _step_beacon(self):
-
-        self.beacon_counter -= self.sysclock.stepsize()
-
-
-    """
-    Steps the vehicle in logical space
-        -Sets is_finished if ROAD_LIMIT reached
-    """
-    def _step_traffic(self):
-
-        self.x = self.x + (self.sysclock.stepsize() * self.v)
-
-        self.is_finished = (self.x > self.limit)
-
-
-    """
-    Causes node to transition to "next_state" state
-        -Cleans up state specific vars for state transitioned ~from~
-    """
-    def _execute_transition(self, next_state):
-        #print "Node {} is transitioning".format(self.uuid)
-
-        if self.cs is State.idle:
-            #The internal beaconing logic initiates transition out of idle
-            #Reset all state vars. Deals with expired beacon edge case
-            self.ifs_cnt = IFS_TIME
-            self._gen_new_CW()
-            self.bit_cnt = PACKET_SIZE
-            self.start_rx_set.clear()
-            self.end_rx_set.clear()
-            self._clear_message()
-
-        elif self.cs is State.sense:
-            self.ifs_cnt = IFS_TIME
-
-        elif self.cs is State.count:
-            if next_state is State.sense:
-                pass #Case where CW value persists
-            else:
-                self._gen_new_CW()
-
-        elif self.cs is State.tx:
-            #Just finished TX'ing a packet
-            self._log_finished_message()
-            #(Cleanup after magical logging)
-            self.bit_cnt = PACKET_SIZE
-            self.start_rx_set.clear()
-            self.end_rx_set.clear()
-            self._clear_message()
-
-        else:
-            assert 0, "oops, _execute_transition"
-
-        self.cs = next_state
 
 
 
@@ -347,16 +298,10 @@ class DSRC_Node:
     # Logging Magic
     ###########################################################################
 
-    def _ack_start(self, rx_node):
-        self.start_rx_set.add(rx_node)
-
-    def _ack_end(self, rx_node):
-        self.end_rx_set.add(rx_node)
-
     """
     Log stats about the finished message to disk
     """
-    def _log_finished_message(self):
+    def _log_finished_tx(self):
 
         if (self.sysclock.timenow() > 0.3) and\
             (self.x > self.tx_range) and\
@@ -373,7 +318,7 @@ class DSRC_Node:
             self.logger.log_packet(self.packet_id, self.x,\
                                    self.packet_creation_time,\
                                    self.sysclock.timenow(),\
-                                   self.tx_start_density, self.local_density,\
+                                   self.tx_start_density, self.tx_end_density,\
                                    start_set_sz, start_set_str,\
                                    end_set_sz, end_set_str)
 
