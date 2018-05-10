@@ -94,12 +94,9 @@ class DSRC_Node:
         self.start_rx_set = set()
 
 
-
     ###########################################################################
     # Public Class Methods
     ###########################################################################
-
-
     """
     Update internal understanding of the world
     """
@@ -158,9 +155,9 @@ class DSRC_Node:
             self.bits_left -= self.sysclock.stepsize() * TX_RATE
 
             #FIXME - hacky logging...
-            if (message.is_start):
+            if (self.message.is_start):
                 self.tx_start_density = self.local_density
-            if (message.is_end):
+            if (self.message.is_end):
                 self.tx_end_density = self.local_density
 
         elif (self.cs is State.sense):
@@ -272,7 +269,7 @@ class DSRC_Node:
     def in_hi_range_of(self, other_x):
         return (other_x < self.x) and (other_x + self.tx_range >= self.x)
 
-    def in_lo_range_of(self, other_x):.
+    def in_lo_range_of(self, other_x):
         return (other_x >= self.x) and (self.x + self.tx_range >= other_x)
 
     def in_range_of(self, other_x):
