@@ -97,11 +97,11 @@ def main():
 
     else:
 
+        #Create the directory where we will log results
         Log_Dir = "{}_{:n}m_{:n}mps_{:.4f}vpm_{:.6f}s/".format(\
                   strftime("%m%d%H%M%S"),\
                   args.tx_range, args.avg_speed,\
                   args.veh_density, cw_generator.max_delay())
-
         #IMPORTANTE! - Create the output dir
         os.mkdir(Log_Dir)
 
@@ -127,8 +127,7 @@ def main():
         while(sysclock.timenow() < End_Time):
 
             #Execute one logical step of the simulation
-            finished_nodes = this_network.step()
-            num_finished += len(finished_nodes)
+            num_finished += len(this_network.step())
             sysclock.tick()
 
 
