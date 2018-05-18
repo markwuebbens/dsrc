@@ -36,7 +36,7 @@ class DSRC_Node_Logger(DSRC_Logger):
     def __init__(self, log_dir, uuid_str, timenow):
 
         assert log_dir[-1] is '/'
-        DSRC_Logger.__init__(self, log_dir, "node{}_.log".format(uuid_str, timenow))
+        DSRC_Logger.__init__(self, log_dir, "node_{}.log".format(uuid_str, timenow))
 
         #self.write_log(Header_Ln.to_str(uuid, timenow))
 

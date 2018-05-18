@@ -8,7 +8,7 @@ class DSRC_Network:
 
     def __init__(self, clock, log_dir,\
                  Avg_Speed, Speed_Delta, Avg_Density,\
-                 CW_Generator, TX_Range, Road_Limit):
+                 CW_Generator, TX_Range):
 
         self.sysclock = clock
         self.log_dir = log_dir
@@ -21,7 +21,6 @@ class DSRC_Network:
         #Config vars passed to the nodes
         self.CW_Generator = CW_Generator
         self.TX_Range = TX_Range
-        self.Road_Limit = Road_Limit
 
         #Total num nodes simulated in the network
         self.total_cnt = 0
@@ -34,40 +33,10 @@ class DSRC_Network:
         #List of nodes which are tx'ing
         self.tx_nodes = set()
 
-        #Fill the length of the road with vehicles
-        marker = Road_Limit;
-        while (marker > 0):
-
-            self._generate_node(marker)
-            marker -= self.sysclock.stepsize() * self.Avg_Speed
-
 
     ###########################################################################
     # Private Class Methods
     ###########################################################################
-    """
-    Add a node to the network with probability 'density_weight'
-    """
-    def _generate_node(self, init_x = 0):
-
-        coin_toss = random.random()
-
-        #s * m/s * veh/m
-        density_weight = self.sysclock.stepsize() * self.Avg_Speed * self.Avg_Density
-
-        if (coin_toss < density_weight):
-
-            velocity = random.uniform(self.Avg_Speed - self.Speed_Delta,\
-                                      self.Avg_Speed + self.Speed_Delta)
-
-            node = DSRC_Node(self.sysclock, self.log_dir,\
-                            self.next_node_id, init_x, velocity,\
-                            self.CW_Generator, self.TX_Range, self.Road_Limit)
-
-            self.next_node_id += 1
-            self.all_nodes.add(node)
-            self.total_cnt += 1
-
 
     """
     Network informs each node of any valid transmissions and of local channel conditions
@@ -163,7 +132,7 @@ class DSRC_Network:
         -Each node in the network executes their state independently
         -Nodes increment in space and time, updating counters and state
         -Nodes that pass the road limit are marked as 'finished' and returned
-        -Updates the list of txing nodes AFTER the step
+        -Updates the list of txing nodes AFTER they step
     -REQUIRES: _arbitrate_channel_conditions has been called
     -OUTPUT - self.tx_nodes, the list of txing nodes
     -RETURN - (finished_nodes) a list of the nodes considered 'finished'
@@ -174,28 +143,50 @@ class DSRC_Network:
         finished_nodes = set()
         self.tx_nodes = set()
 
-        #All Nodes in the network step forward
         for node in self.all_nodes:
 
+            #All Nodes in the network step forward
             if (node.step()):
                 #Aggregate 'finished' nodes
                 finished_nodes.add(node)
 
+            #Not finished nodes transition to the next state
+            elif (node.transition_state()):
+                #Aggregate nodes which are now txing
+                self.tx_nodes.add(node)
+
         #Remove finished nodes from the network
         self.all_nodes = self.all_nodes - finished_nodes
-
-        #Everyone else transitions to the next state
-        for node in self.all_nodes:
-
-            if (node.transition_state()):
-                #Aggregate nodes which are tx'ing now
-                self.tx_nodes.add(node)
 
         return finished_nodes
 
     ###########################################################################
     # Public Class Methods
     ###########################################################################
+    """
+    Add a node to the network with probability 'density_weight'
+    """
+    def generate_node(self, init_x = 0):
+
+        coin_toss = random.random()
+
+        #s * m/s * veh/m
+        density_weight = self.sysclock.stepsize() * self.Avg_Speed * self.Avg_Density
+
+        if (coin_toss < density_weight):
+
+            velocity = random.uniform(self.Avg_Speed - self.Speed_Delta,\
+                                      self.Avg_Speed + self.Speed_Delta)
+
+            node = DSRC_Node(self.sysclock, self.log_dir,\
+                            self.next_node_id, init_x, velocity,\
+                            self.CW_Generator, self.TX_Range,\
+                            self.Avg_Speed + self.Speed_Delta)
+
+            self.next_node_id += 1
+            self.all_nodes.add(node)
+            self.total_cnt += 1
+
     """
     Channel conditions are determined for the entire network
     Each node steps forward logically and independently
@@ -204,7 +195,7 @@ class DSRC_Network:
     def step(self):
 
         #Attempt to generate a new node
-        self._generate_node()
+        self.generate_node()
 
         #Network arbitrates message tx'ing and collision for curr state
         # -First sorts tx_nodes and all_nodes lists

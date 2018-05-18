@@ -4,7 +4,11 @@
 US_WEIGHT = 1000000
 MEGA_BIT_WEIGHT = 1000000
 
-#Network defs
+#Simulation definitions
+ROAD_LIMIT = 1000.0 #m
+END_TIME = 2.0 * 60 #s
+
+#Networking definitions
 SLOT_TIME_US = 13.0 #us
 SLOT_TIME = SLOT_TIME_US / US_WEIGHT #s
 IFS_TIME_US = 58.0 #us

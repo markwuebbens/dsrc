@@ -7,13 +7,7 @@ import random
 from time import strftime
 from network import DSRC_Network
 from logger import DSRC_Sim_Logger
-from config import SLOT_TIME, BEACON_PERIOD
-
-#Road definitions
-Road_Limit = 500.0 #m
-
-#Sim definitions
-End_Time = 5.0 * 60 #s
+from config import SLOT_TIME, BEACON_PERIOD, ROAD_LIMIT, END_TIME
 
 class Clock():
     def __init__(self):
@@ -33,10 +27,11 @@ class Clock():
 
 class CW_Generator():
     def __init__(self, CW_POWER):
-        assert (CW_POWER >= 2) and (2**(1.0*CW_POWER) * SLOT_TIME < BEACON_PERIOD / 10.0), "CW_POWER out of bounds {}".format(CW_POWER)
+        assert (CW_POWER >= 2) and (2**(1.0*CW_POWER) * SLOT_TIME < BEACON_PERIOD / 10.0),\
+        "CW_POWER out of bounds {}".format(CW_POWER)
 
         self.cw_power = CW_POWER
-        self.cw_nom = 2 ** (CW_POWER * 1.0) #units of slots
+        self.cw_nom = 2.0 ** (CW_POWER * 1.0) #units of slots
         self.cw_max_delay = self.cw_nom * SLOT_TIME #units of seconds
 
     def gen(self):
@@ -48,9 +43,16 @@ class CW_Generator():
         return self.cw_max_delay
 
 
-def main():
+def init_network(network, clock, avg_speed):
 
-    global Road_Limit, End_Time
+    #Fill the length of the road with vehicles
+    marker = ROAD_LIMIT;
+    while (marker > 0):
+
+        network.generate_node(marker)
+        marker -= clock.stepsize() * avg_speed
+
+def main():
 
     parser = argparse.ArgumentParser(description='A Simulator')
     parser.add_argument("tx_range",
@@ -60,7 +62,7 @@ def main():
                         help="The exponent to determine CW backoff time",
                         type=float)
     parser.add_argument("veh_density",
-                        help="Rho, the average vehicular density (veh/m)",
+                        help="The average vehicular density (veh/m)",
                         type=float)
     parser.add_argument("avg_speed", help="Avg vehicular speed (m/s)", type=float)
     parser.add_argument("speed_delta", help="The delta speed value (m/s)", type=float)
@@ -70,8 +72,8 @@ def main():
 
         # Sanitize TX_RANGE
         #Max tx_range of 1 fifth of the road length
-        assert ((args.tx_range > 0.0) and (args.tx_range * 5.0 < Road_Limit)),\
-               "TX_RANGE {} {}".format(args.tx_range, Road_Limit)
+        assert ((args.tx_range > 0.0) and (args.tx_range * 5.0 < ROAD_LIMIT)),\
+               "TX_RANGE {} {}".format(args.tx_range, ROAD_LIMIT)
 
         # Sanitize  AVG_SPEED
         #Max speed of ~220 mph
@@ -110,25 +112,30 @@ def main():
         #Init the system clock
         sysclock = Clock()
 
-        #Init the simulated network, (creates a road filled with vehicles)
+        #Create the network
         this_network = DSRC_Network(sysclock, Log_Dir,\
                                     args.avg_speed, args.speed_delta, args.veh_density,\
-                                    cw_generator, args.tx_range, Road_Limit)
+                                    cw_generator, args.tx_range)
+
+        #Fills the road with vehicles
+        init_network(this_network, sysclock, args.avg_speed)
 
         #Init a logger for the simulation
         this_sim_logger = DSRC_Sim_Logger(sysclock.stepsize(),\
                                     strftime("%m%d%H%M%S"),\
                                     Log_Dir, args.veh_density, args.tx_range,\
                                     cw_generator.max_delay(),\
-                                    args.avg_speed, args.speed_delta, Road_Limit)
+                                    args.avg_speed, args.speed_delta,\
+                                    ROAD_LIMIT)
 
-
+        #######################################################################
         #Run the network until end times come
-        while(sysclock.timenow() < End_Time):
+        #######################################################################
+        while(sysclock.timenow() < END_TIME):
 
+            sysclock.tick()
             #Execute one logical step of the simulation
             num_finished += len(this_network.step())
-            sysclock.tick()
 
 
         #Log some summary values
@@ -136,7 +143,6 @@ def main():
                                         num_finished,\
                                         strftime("%m%d%H%M%S"))
 
-        print "GG No RE"
         sys.exit()
 
 main()

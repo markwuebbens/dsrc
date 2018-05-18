@@ -20,15 +20,8 @@ def scrape_first_pass(directory, filename, sums_by_rho_dict):
 
                 x_coord = np.longdouble(location[:-1])
 
-                start_nodes = start_list[:-1].split(' ')
-                start_ack_cnt   = len(start_nodes)
-                start_cnt = int(start_cnt_str)
-                assert (start_ack_cnt == int(start_cnt)), "start {} {} ".format(start_ack_cnt, start_cnt) + line
-
-                end_nodes   = end_list[:-1].split(' ')
-                end_ack_cnt   = len(end_nodes)
-                end_cnt = int(end_cnt_str)
-                assert (end_ack_cnt == int(end_cnt)), "start {} {} ".format(end_ack_cnt, end_cnt) + line
+                start_acks = int(start_cnt_str)
+                end_acks = int(end_cnt_str)
 
                 start_rho = int(start_density_str) + 1
                 end_rho =   int(start_density_str) + 1
@@ -37,27 +30,30 @@ def scrape_first_pass(directory, filename, sums_by_rho_dict):
                 end_time   = np.longdouble(end_time_str)
                 this_pir   = end_time - start_time
 
+                #assert (x_coord < 950), "Drop this packet..."
+                assert ((start_rho >= 0) and (end_rho >= 0)),\
+                "start_rho={}, end_rho={}".format(start_rho, end_rho)+'\n'+line
+                assert ((0 <= start_acks) and (start_acks <= start_rho)),\
+                "start_acks={}, start_rho={}".format(start_acks, start_rho)+'\n'+line
+                assert ((0 <= end_acks) and (end_acks <= start_rho)),\
+                "end_acks={}, start_rho={}".format(end_ackis, start_rho)+'\n'+line
+
             except Exception as e:
                 print e.message,
-                print e.args,
-                print "fuck1"
-                sys.exit
+                print " fuck1"
+                continue
 
             else:
 
-                assert ((start_rho >= 0) and (end_rho >= 0)), "start_rho = {} end_rho = {} ".format(start_rho, end_rho) + line
-                assert ((0 <= start_ack_cnt) and (start_ack_cnt <= start_rho)), "start_ack_cnt = {}, start_rho = {} ".format(start_ack_cnt, start_rho) + line
-                assert ((0 <= end_ack_cnt) and (end_ack_cnt <= end_rho)), "end_ack_cnt = {}, end_rho = {} ".format(end_ack_cnt, end_rho) + line
-
-
                 if start_rho in sums_by_rho_dict:
                     (rate_sum, pir_sum, cnt_now) = sums_by_rho_dict[start_rho]
-                    sums_by_rho_dict[start_rho] = (rate_sum + np.longdouble(end_ack_cnt)/start_rho,\
-                                                   pir_sum + this_pir, cnt_now + 1)
+                    sums_by_rho_dict[start_rho] =\
+                        (rate_sum + np.longdouble(end_acks)/start_rho,\
+                         pir_sum + this_pir, cnt_now + 1)
 
                 else:
                     #Record new reception number and pir entries
-                    sums_by_rho_dict[start_rho] = (np.longdouble(end_ack_cnt)/start_rho, this_pir, 1)
+                    sums_by_rho_dict[start_rho] = (np.longdouble(end_acks)/start_rho, this_pir, 1)
 
 def scrape_second_pass(directory, filename, sums_by_rho_dict, stds_by_rho_dict):
 
@@ -72,70 +68,85 @@ def scrape_second_pass(directory, filename, sums_by_rho_dict, stds_by_rho_dict):
                 [packet_id, location]        = toks[0].split('@')
                 [start_time_str, end_time_str]       = toks[1].split(' ')
                 [start_density_str, end_density_str] = toks[2].split(' ')
-                [start_cnt, start_list]      = toks[3].split('-')
-                [end_cnt, end_list]          = toks[4].split('-')
+                [start_cnt_str, start_list]      = toks[3].split('-')
+                [end_cnt_str, end_list]          = toks[4].split('-')
 
                 x_coord = np.longdouble(location[:-1])
 
-                start_nodes = start_list[:-1].split(' ')
-                start_ack_cnt   = len(start_nodes)
-                end_nodes   = end_list[:-1].split(' ')
-                end_ack_cnt   = len(end_nodes)
+                start_acks = int(start_cnt_str)
+                end_acks = int(end_cnt_str)
+
+                start_rho = int(start_density_str) + 1
+                end_rho =   int(start_density_str) + 1
 
                 start_time = np.longdouble(start_time_str)
                 end_time   = np.longdouble(end_time_str)
                 this_pir   = end_time - start_time
 
+                #assert (x_coord < 950), "Drop this packet..."
+                assert ((start_rho >= 0) and (end_rho >= 0)),\
+                "start_rho={}, end_rho={}".format(start_rho, end_rho)+'\n'+line
+                assert ((0 <= start_acks) and (start_acks <= start_rho)),\
+                "start_acks={}, start_rho={}".format(start_acks, start_rho)+'\n'+line
+                assert ((0 <= end_acks) and (end_acks <= start_rho)),\
+                "end_acks={}, start_rho={}".format(end_acks, start_rho)+'\n'+line
+
+                assert (start_rho in sums_by_rho_dict),\
+                "Rho:{} not yet seen?".format(start_rho)
+
             except Exception as e:
-                print e.message,
-                print e.args,
-                print "fuck2"
-                sys.exit
+                #print e.message,
+                #print " fuck2"
+                continue
 
             else:
 
-                assert (start_ack_cnt in sums_by_rho_dict)
 
-                if start_ack_cnt in stds_by_rho_dict:
-                    (rate_sum, pir_sum, sums_cnt) = sums_by_rho_dict[start_ack_cnt]
-                    (rate_std, pir_std, stds_cnt) = stds_by_rho_dict[start_ack_cnt]
+                if start_rho in stds_by_rho_dict:
+                    (rate_sum, pir_sum, sums_cnt) = sums_by_rho_dict[start_rho]
+                    (rate_std, pir_std, stds_cnt) = stds_by_rho_dict[start_rho]
 
-                    this_rate_std = ((np.longdouble(end_ack_cnt) / start_ack_cnt) - (np.longdouble(rate_sum) / sums_cnt))**2
+                    this_rate_std = ((np.longdouble(end_acks) / start_rho) - (np.longdouble(rate_sum) / sums_cnt))**2
                     this_pir_std  = (this_pir - (np.longdouble(pir_sum) / sums_cnt))**2
 
-                    stds_by_rho_dict[start_ack_cnt] = (rate_std + this_rate_std, pir_std + this_pir_std, stds_cnt + 1)
+                    stds_by_rho_dict[start_rho] = (rate_std + this_rate_std, pir_std + this_pir_std, stds_cnt + 1)
 
                 else:
-                    (rate_sum, pir_sum, sums_cnt) = sums_by_rho_dict[start_ack_cnt]
+                    (rate_sum, pir_sum, sums_cnt) = sums_by_rho_dict[start_rho]
 
-                    this_rate_std = ((np.longdouble(end_ack_cnt) / start_ack_cnt) - (np.longdouble(rate_sum) / sums_cnt))**2
+                    this_rate_std = ((np.longdouble(end_acks) / start_rho) - (np.longdouble(rate_sum) / sums_cnt))**2
                     this_pir_std  = (this_pir - (np.longdouble(pir_sum) / sums_cnt))**2
 
-                    stds_by_rho_dict[start_ack_cnt] = (this_rate_std, this_pir_std, 1)
+                    stds_by_rho_dict[start_rho] = (this_rate_std, this_pir_std, 1)
 
 def print_final_stats(intro, sums_dict, stds_dict):
     print intro
     print '{},{},{},{},{},{}'.format('rho', 'sz', 'rate', 'rate SD','pir', 'pir SD')
     for rho in sums_dict:
 
-        assert rho in stds_dict
+        try:
+            assert rho in stds_dict
 
-        (rate_sum, pir_sum, sums_cnt) = sums_dict[rho]
-        (rate_std, pir_std, stds_cnt) = stds_dict[rho]
+            (rate_sum, pir_sum, sums_cnt) = sums_dict[rho]
+            (rate_std, pir_std, stds_cnt) = stds_dict[rho]
 
-        assert (sums_cnt == stds_cnt), "oops, print_stats: sum={}, std={}".format(sums_cnt, stds_cnt)
+            assert (sums_cnt == stds_cnt), "oops, print_stats: sum={}, std={}".format(sums_cnt, stds_cnt)
 
-        if ((rho <= 0) or (sums_cnt <= 1)):
-            print "FIXME!: rho={}, samples={}".format(rho, this_cnt)
-            sys.exit
+        except Exception as e:
+            print e.message
+            continue
+        else:
+            if ((rho <= 0) or (sums_cnt <= 1) or (stds_cnt <= 1)):
+                print "WHOOPS: rho={}, sums_cnt={}, stds_cnt={}".format(rho, sums_cnt, stds_cnt)
+                continue
 
-        avg_rate = rate_sum * 1.0 / sums_cnt
-        rate_sd = (rate_std / stds_cnt)**0.5
+            avg_rate = rate_sum * 1.0 / sums_cnt
+            rate_sd = (rate_std / stds_cnt)**0.5
 
-        avg_pir = pir_sum * 1.0 / sums_cnt
-        pir_sd = (pir_std / stds_cnt)**0.5
+            avg_pir = pir_sum * 1.0 / sums_cnt
+            pir_sd = (pir_std / stds_cnt)**0.5
 
-        print '{:d},{:d},{:0.8f},{:0.8f},{:0.8f},{:0.8f}'.format(rho, sums_cnt, avg_rate, rate_sd, avg_pir, pir_sd)
+            print '{:d},{:d},{:0.8f},{:0.8f},{:0.8f},{:0.8f}'.format(rho, sums_cnt, avg_rate, rate_sd, avg_pir, pir_sd)
 
 def scrape_sim_directory(ref_dir, sim_dir):
 
@@ -151,7 +162,6 @@ def scrape_sim_directory(ref_dir, sim_dir):
 
     except Exception as e:
         print e.message,
-        print e.args,
         print "fuck3"
         sys.exit
 

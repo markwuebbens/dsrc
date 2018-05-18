@@ -1,6 +1,7 @@
 import random
 import string
-from config import SLOT_TIME, BEACON_PERIOD, PACKET_SIZE, IFS_TIME, TX_RATE
+from config import SLOT_TIME, BEACON_PERIOD, PACKET_SIZE, IFS_TIME,\
+                   TX_RATE, ROAD_LIMIT
 from logger import DSRC_Node_Logger
 
 class State:
@@ -37,7 +38,8 @@ class DSRC_Node:
 
     def __init__(self, clock, log_dir,\
                  uuid, init_x, init_v,\
-                 CW_Generator, TX_Range, Road_Limit):
+                 CW_Generator, TX_Range,\
+                 _max_speed_setting):
 
         self.cs = State.idle
 
@@ -51,7 +53,6 @@ class DSRC_Node:
         # Road related vars
         self.x = init_x
         self.v = init_v
-        self.limit = Road_Limit
         self.is_finished = False
 
         # DSRC config parameters
@@ -85,13 +86,16 @@ class DSRC_Node:
         self.tx_msg_id = None
         self.tx_seq = None
 
-        ##############################
-        # "Extra" vars for statistics
-        ##############################
+        ##############################################################
+        # "Extra" and/or "magical vars for logging and statistics
+        ##############################################################
 
         # RX logging/ack'ing vars
-        self.end_rx_set = set()
-        self.start_rx_set = set()
+        self._start_rx_set = set()
+        self._end_rx_set = set()
+
+        #Used to calculate limits of road which are valid for logging
+        self._max_speed = _max_speed_setting
 
 
     ###########################################################################
@@ -182,7 +186,7 @@ class DSRC_Node:
         # Labeled as 'finished' once past ROAD_LIMIT #
         ##############################################
         self.x = self.x + (self.sysclock.stepsize() * self.v)
-        self.is_finished = (self.x > self.limit)
+        self.is_finished = (self.x > ROAD_LIMIT)
 
         return self.is_finished
 
@@ -245,8 +249,8 @@ class DSRC_Node:
 
                 self.tx_start_density = self.local_density
 
-                self.start_rx_set.clear()
-                self.end_rx_set.clear()
+                self._start_rx_set.clear()
+                self._end_rx_set.clear()
 
                 self.bits_left = PACKET_SIZE
 
@@ -261,10 +265,10 @@ class DSRC_Node:
         return self.message
 
     def ack_start_msg(self, rx_node):
-        self.start_rx_set.add(rx_node)
+        self._start_rx_set.add(rx_node)
 
     def ack_end_msg(self, rx_node):
-        self.end_rx_set.add(rx_node)
+        self._end_rx_set.add(rx_node)
 
     def in_hi_range_of(self, other_x):
         return (other_x < self.x) and (other_x + self.tx_range >= self.x)
@@ -300,17 +304,19 @@ class DSRC_Node:
     """
     def _log_finished_tx(self):
 
+        #Only log messages after an initialization period and when the vehicle
+        #is outside of transmission range of the limits of the road
         if (self.sysclock.timenow() > 0.3) and\
-            (self.x > self.tx_range) and\
-            (self.x < self.limit - self.tx_range):
+            (self.x > self.tx_range + (PACKET_SIZE/TX_RATE * self._max_speed)) and\
+            (self.x < ROAD_LIMIT - self.tx_range - (PACKET_SIZE/TX_RATE * self._max_speed)):
 
-            start_set_sz = len(self.start_rx_set)
+            start_set_sz = len(self._start_rx_set)
             start_set_str = "".join(\
-                "{:n} ".format(node.uuid) for node in self.start_rx_set)
+                "{:n},".format(node.uuid) for node in self._start_rx_set)
 
-            end_set_sz = len(self.end_rx_set)
+            end_set_sz = len(self._end_rx_set)
             end_set_str = "".join(\
-                "{:n} ".format(node.uuid) for node in self.end_rx_set)
+                "{:n},".format(node.uuid) for node in self._end_rx_set)
 
             self.logger.log_packet(self.packet_id, self.x,\
                                    self.packet_creation_time,\
